@@ -2,6 +2,9 @@
   "name": "spell-game-engine",
   "private": true,
   "version": "0.1.0",
+  "engines": {
+    "node": ">=22.5.0"
+  },
   "workspaces": [
     "packages/*",
     "apps/*"
@@ -9,7 +12,7 @@
   "scripts": {
     "build": "npm run build --workspace=packages/shared-types && npm run build --workspace=packages/game-core && npm run build --workspace=apps/server",
     "dev": "npm run dev --workspace=apps/server",
-    "start": "npm run start --workspace=apps/server",
+    "start": "npm run seed && npm run start --workspace=apps/server",
     "seed": "tsx apps/server/src/seed.ts",
     "test": "vitest run",
     "simulate": "tsx tests/integration/simulate.ts"
