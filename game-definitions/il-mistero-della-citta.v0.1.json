@@ -1,0 +1,627 @@
+{
+  "schemaVersion": "0.1",
+  "game": {
+    "id": "il-mistero-della-citta",
+    "name": "Il mistero della città",
+    "defaultLocale": "it"
+  },
+  "roles": [
+    "control",
+    "team",
+    "facilitator"
+  ],
+  "settings": {
+    "teamsMin": 1,
+    "teamsMax": 20,
+    "oneDevicePerTeam": true,
+    "showLeaderboard": true
+  },
+  "phases": [
+    {
+      "id": "percorso",
+      "title": "Caccia al tesoro per le vie di Bologna",
+      "mode": "itinerary",
+      "itinerary": {
+        "stepsSource": "tappe",
+        "routing": {
+          "minGuideDistance": 2
+        },
+        "maxPhotoAttempts": 5,
+        "hintPenalty": 5
+      },
+      "completion": {
+        "type": "each_team_at_own_pace"
+      }
+    }
+  ],
+  "content": {
+    "tappe": [
+      {
+        "id": "tappa-1",
+        "number": 1,
+        "type": "start",
+        "title": "Porta San Mamolo",
+        "body": "Antica porta delle mura del XIII secolo, crocevia fondamentale della città. Un tempo segnava il passaggio obbligato per chi giungeva dai colli verso il centro storico. È il punto di ritrovo ideale per iniziare la nostra avventura alla scoperta di Bologna, seguendo le orme dei personaggi che l'hanno vissuta. Si parte!",
+        "config": {
+          "locationName": "Porta San Mamolo"
+        },
+        "points": 0
+      },
+      {
+        "id": "tappa-2",
+        "number": 2,
+        "type": "photoApproval",
+        "title": "L'orfanotrofio",
+        "body": "L'antico orfanotrofio cittadino accoglieva i bambini abbandonati, affettuosamente detti \"bastardini\". Le sue possenti mura hanno custodito per secoli innumerevoli storie di speranza e rinascita, divenendo un simbolo di accoglienza cittadina. L'edificio storico conserva ancora intatto il suo fascino imponente e i misteri del passato bolognese. Trovate la Diavolessa posta all'ingresso dell'ex orfanotrofio e scattate una foto di gruppo.",
+        "config": {
+          "locationName": "Ospedale dei Bastardini"
+        },
+        "points": 10,
+        "block": "1",
+        "groups": [
+          "1",
+          "2"
+        ]
+      },
+      {
+        "id": "tappa-3",
+        "number": 3,
+        "type": "textMatch",
+        "title": "Un'oasi di pace",
+        "body": "Elegante piazza ottocentesca, un tempo giardino rigoglioso, dedicata al noto statista. Le sue panchine e i suoi alberi secolari offrono un'oasi di pace, mentre i palazzi storici che la circondano ricordano i fasti della borghesia dell'epoca. Oggi questo spazio ospita anche un sentito omaggio a uno dei più celebri e amati cantautori bolognesi. Vai a vedere chi vi attende immobile su una panchina.",
+        "config": {
+          "expectedAnswer": "Lucio Dalla",
+          "kind": "testo",
+          "locationName": "Piazza Cavour"
+        },
+        "points": 10,
+        "hint": "Ha unito l'italia.... Benso",
+        "block": "1",
+        "groups": [
+          "3",
+          "4"
+        ]
+      },
+      {
+        "id": "tappa-4",
+        "number": 4,
+        "type": "photoApproval",
+        "title": "Luogo di culto",
+        "body": "Uno dei luoghi di culto più importanti e maestosi di Bologna, fulcro della vita spirituale cittadina. Al suo interno custodisce le spoglie del fondatore dell'Ordine dei Predicatori in un'Arca capolavoro, impreziosita da sculture di maestri del Rinascimento. Un luogo così intriso di misticismo da meritare persino l'attenzione del Sommo Poeta nella sua opera più grande. Nel Paradiso, Dante cita un santo legato a questa chiesa. Inviate una foto della facciata.",
+        "config": {
+          "locationName": "Basilica San Domenico"
+        },
+        "points": 10,
+        "hint": "Tra Garibaldi e De' poeti",
+        "block": "1",
+        "groups": [
+          "5",
+          "6"
+        ]
+      },
+      {
+        "id": "tappa-5",
+        "number": 5,
+        "type": "textMatch",
+        "title": "Via Massimo... Taparelli???",
+        "body": "Elegante edificio rinascimentale, questo palazzo si distingue nettamente nel panorama cittadino. La sua facciata è infatti caratterizzata da un bellissimo rivestimento a bugnato, una soluzione architettonica insolita per Bologna, che testimonia la ricchezza, l'influenza politica e la potenza delle nobili famiglie dell'epoca. Contate le pietre che si trovano sotto la finestra del piano terra di destra... quanti blocchi sono?",
+        "config": {
+          "expectedAnswer": "56",
+          "kind": "testo",
+          "locationName": "Palazzo Bevilacqua Sanuti"
+        },
+        "points": 10,
+        "hint": "Non è \"six-seven\" ma ci somiglia",
+        "block": "1",
+        "groups": [
+          "7",
+          "8"
+        ]
+      },
+      {
+        "id": "tappa-6",
+        "number": 6,
+        "type": "photoApproval",
+        "title": "Tra rane e scosse",
+        "body": "Situata proprio alle spalle della maestosa e imponente Basilica di San Petronio, questa luminosa piazza offre uno scorcio bellissimo e decisamente meno affollato sul centro cittadino. Intitolata al celebre scienziato bolognese che studiò l'elettricità, è un crocevia elegante dove si respira il legame profondo tra la città e la ricerca scientifica. Trovate la statua dello scienziato e inviateci una vostro selfie sotto la statua.",
+        "config": {
+          "locationName": "Piazza Galvani"
+        },
+        "points": 10,
+        "hint": "Dai che ce la fate!",
+        "block": "1",
+        "groups": [
+          "5",
+          "6",
+          "7",
+          "8"
+        ]
+      },
+      {
+        "id": "tappa-7",
+        "number": 7,
+        "type": "textMatch",
+        "title": "Si studia ma si giocava a basket",
+        "body": "Vero e proprio cuore pulsante della cultura cittadina, questo grandioso spazio architettonico ha avuto mille vite nel corso dei secoli: è stato orto botanico, vivace ufficio postale, luogo di scambi commerciali e persino sede di una banca. Proprio il suo passato finanziario ha lasciato tracce nascoste nelle ricche decorazioni. Entrate e osservate il soffitto. Quale motto è scritto nei quattro angoli vicino alle api?",
+        "config": {
+          "expectedAnswer": "Conservo ed aumento",
+          "kind": "testo",
+          "locationName": "Biblioteca Salaborsa"
+        },
+        "points": 10,
+        "hint": "Sulla facciata memorie partigiane",
+        "block": "1",
+        "groups": [
+          "1",
+          "2",
+          "3",
+          "4"
+        ]
+      },
+      {
+        "id": "tappa-8",
+        "number": 8,
+        "type": "textMatch",
+        "title": "Al Zigant",
+        "body": "Simbolo indiscusso di Bologna, questa imponente statua in bronzo, capolavoro del Giambologna, domina la piazza omonima catturando lo sguardo di ogni passante. L'opera racchiude in sé innumerevoli storie legate al potere papale dell'epoca, profondi significati simbolici e miti popolari che si tramandano da generazioni. Dite alla guida il suo pittoresco soprannome in bolognese",
+        "config": {
+          "expectedAnswer": "Giambologna",
+          "kind": "guida",
+          "locationName": "Fontana del Nettuno"
+        },
+        "points": 20,
+        "hint": "Dai che ce la fate!",
+        "block": "1"
+      },
+      {
+        "id": "tappa-9",
+        "number": 9,
+        "type": "textMatch",
+        "title": "Tanti si sposano qui",
+        "body": "Monumentale e maestosa sede del Comune che si affaccia orgogliosamente su Piazza Maggiore, questo palazzo testimonia secoli di complessa storia politica cittadina. La sua elaborata facciata è sorvegliata da statue e dettagli architettonici che raccontano aneddoti curiosi, sotterfugi e stratagemmi di epoche passate. Osservate la statua all'ingresso con la scritta \"Divus Petronius\". Chi rappresentava realmente prima di essere temporaneamente camuffata?",
+        "config": {
+          "expectedAnswer": "Gregorio XIII",
+          "kind": "testo",
+          "locationName": "Palazzo d'Accursio"
+        },
+        "points": 10,
+        "hint": "Era un Papa",
+        "block": "1",
+        "groups": [
+          "1",
+          "3",
+          "5",
+          "7"
+        ]
+      },
+      {
+        "id": "tappa-10",
+        "number": 10,
+        "type": "photoApproval",
+        "title": "Un telefono senza fili",
+        "body": "Primo e fondamentale palazzo pubblico cittadino, sorge proprio nel cuore pulsante della piazza maggiore, fronteggiando San Petronio. È celebre per l'imponente torre dell'Arengo che richiamava il popolo, ma soprattutto per le suggestive e innumerevoli decorazioni scolpite che adornano i pilastri del suo famoso e acusticamente perfetto voltone. Mandateci una foto della facciata che affaccia sul Nettuno.",
+        "config": {
+          "locationName": "Palazzo del Podestà"
+        },
+        "points": 10,
+        "hint": "Dai che ce la fate!",
+        "block": "1",
+        "groups": [
+          "2",
+          "4",
+          "6",
+          "8"
+        ]
+      },
+      {
+        "id": "tappa-11",
+        "number": 11,
+        "type": "textMatch",
+        "title": "Una famiglia Guelfa",
+        "body": "Un suggestivo e ombroso passaggio coperto che vi catapulta magicamente, in un solo istante, direttamente nella Bologna medievale. Quest'area architettonica era la sede delle imponenti abitazioni e delle torri di un'antica, ricca e potente famiglia guelfa, i cui membri non sfuggirono però alla penna severa del Sommo Poeta. Come si chiama il voltone?",
+        "config": {
+          "expectedAnswer": "Voltone Caccianemici",
+          "kind": "testo",
+          "locationName": "Voltone Caccianemici"
+        },
+        "points": 10,
+        "hint": "Vicino alle Poste Centrali",
+        "block": "1"
+      },
+      {
+        "id": "tappa-12",
+        "number": 12,
+        "type": "textMatch",
+        "title": "Casa dei Mercanti",
+        "body": "Capolavoro del gotico fiorito bolognese, questo edificio finemente decorato ha ospitato per secoli il severo tribunale dei mercanti e oggi è la sede della Camera di Commercio. Al suo interno, gelosamente custodite in un archivio, riposano le ricette originali e ufficiali della tradizione culinaria locale. Osservate attentamente la facciata: quanti sono gli eleganti balconcini (baldacchini) di marmo bianco che sporgono sopra gli archi?",
+        "config": {
+          "expectedAnswer": "1",
+          "kind": "testo",
+          "locationName": "Palazzo della Mercanzia"
+        },
+        "points": 10,
+        "hint": "Dai che ce la fate!",
+        "block": "1"
+      },
+      {
+        "id": "tappa-13",
+        "number": 13,
+        "type": "textMatch",
+        "title": "Qui si studia(va)",
+        "body": "Magnifica sede storica dell'Università dal 1563 al 1803, il palazzo è un vero e proprio tempio del sapere. I suoi porticati, lo scalone e i lunghi corridoi sono impreziositi da un complesso araldico unico al mondo: migliaia di stemmi studenteschi dipinti che raccontano secoli di vita accademica internazionale. Cercate la guida che vi attende e ditele \"Taddeo e Oderisi\" per sbloccare la narrazione sulle decorazioni universitarie.",
+        "config": {
+          "expectedAnswer": "Stabat Mater",
+          "kind": "guida",
+          "locationName": "Archiginnasio"
+        },
+        "points": 20,
+        "hint": "Pavaglione!",
+        "block": "1"
+      },
+      {
+        "id": "tappa-14",
+        "number": 14,
+        "type": "textMatch",
+        "title": "Bovindo",
+        "body": "Passeggiando per questa tranquilla e pittoresca viuzza del centro storico, alzando gli occhi è possibile notare curiosi e inaspettati dettagli architettonici. Tra questi, spiccano eleganti finestre sporgenti di chiara influenza liberty, che impreziosiscono le facciate dei palazzi e nascondono antichi messaggi. Trovate la frase in latino scritta sotto il bovindo in legno. Cosa recita l'iscrizione?",
+        "config": {
+          "expectedAnswer": "Anno Domini mdclxxxv",
+          "kind": "testo",
+          "locationName": "Via Marsili"
+        },
+        "points": 10,
+        "hint": "Proprio sull'angolo",
+        "block": "4"
+      },
+      {
+        "id": "tappa-15",
+        "number": 15,
+        "type": "textMatch",
+        "title": "Caccia alla freccia",
+        "body": "Un'affascinante e pittoresca galleria coperta che attraversa suggestivi cortili medievali e ricchi palazzi signorili, collegando due arterie storiche della città. Le imponenti strutture lignee dei suoi antichi portici celano, tra le travi secolari, leggende romantiche e misteriose che affascinano da sempre i visitatori. Dite alla guida la parola chiave \"Patrimonio UNESCO\" per conoscere la leggenda delle tre frecce e i materiali dei portici.",
+        "config": {
+          "expectedAnswer": "Arenaria",
+          "kind": "guida",
+          "locationName": "Corte Isolani"
+        },
+        "points": 20,
+        "hint": "Tra Strada Maggiore e Piazza Santo Stefano",
+        "block": "2"
+      },
+      {
+        "id": "tappa-16",
+        "number": 16,
+        "type": "photoApproval",
+        "title": "Le sette chiese",
+        "body": "Conosciuta affettuosamente dai bolognesi anche come il complesso delle \"Sette Chiese\", è forse la piazza più iconica, mistica e peculiare dell'intera città. Il suo affascinante e asimmetrico intreccio di edifici sacri, costruiti in epoche diverse, restituisce l'immagine di un luogo sospeso nel tempo, capace di incantare chiunque. Fate una foto creativa di gruppo davanti al complesso.",
+        "config": {
+          "locationName": "Piazza Santo Stefano"
+        },
+        "points": 10,
+        "hint": "Dai che ce la fate!",
+        "block": "2",
+        "groups": [
+          "1",
+          "3",
+          "5",
+          "7"
+        ]
+      },
+      {
+        "id": "tappa-17",
+        "number": 17,
+        "type": "photoApproval",
+        "title": "Pizza Rossini",
+        "body": "Importante e lungo tracciato urbano che ricalca l'antica via Emilia di epoca romana, questa strada ha un passato glorioso. Rappresentava infatti l'ingresso monumentale a Bologna, un percorso d'onore riservato ai viaggiatori più illustri e potenti che giungevano in città per lasciare il segno nella storia politica e religiosa. Nell'adiacente piazzetta San Michele c'è casa Rossini che vi attende per una foto!",
+        "config": {
+          "locationName": "Strada Maggiore"
+        },
+        "points": 10,
+        "hint": "Dai che ce la fate!",
+        "block": "2",
+        "groups": [
+          "1",
+          "3",
+          "5",
+          "7"
+        ]
+      },
+      {
+        "id": "tappa-18",
+        "number": 18,
+        "type": "textMatch",
+        "title": "Caffè Maxime",
+        "body": "Simboli indiscussi e inconfondibili della skyline bolognese, queste strutture svettano orgogliose nel cielo cittadino. Rappresentano oggi le uniche e maestose superstiti delle decine e decine di torri difensive e gentilizie che, nel pieno del Medioevo, rendevano la città simile a una foresta di mattoni. Trovate la guida e pronunciate \"Garisenda\" per far sbloccare la narrazione sulla funzione difensiva delle torri.",
+        "config": {
+          "expectedAnswer": "Selva Turrita",
+          "kind": "guida",
+          "locationName": "Due Torri (Caffè Maxime)"
+        },
+        "points": 20,
+        "hint": "Dai che ce la fate!",
+        "block": "2"
+      },
+      {
+        "id": "tappa-19",
+        "number": 19,
+        "type": "textMatch",
+        "title": "Diabolik e il greco",
+        "body": "Epicentro assoluto e inconfondibile della zona universitaria, questa vivace e rumorosa piazza è dominata dalla maestosa e severa facciata del Teatro Comunale. Circondata dai palazzi storici dell'Ateneo, rappresenta il crocevia quotidiano di migliaia di studenti, artisti e professori provenienti da ogni angolo d'Italia e del mondo. Che alberi sono quelli presenti nell'adiacente piazzetta Francesco Molinari Pradelli?",
+        "config": {
+          "expectedAnswer": "Ginkgo Biloba",
+          "kind": "testo",
+          "locationName": "Piazza Verdi"
+        },
+        "points": 20,
+        "hint": "L'ispettore di diabolik",
+        "block": "2",
+        "groups": [
+          "2",
+          "4",
+          "6",
+          "8"
+        ]
+      },
+      {
+        "id": "tappa-20",
+        "number": 20,
+        "type": "photoApproval",
+        "title": "Prospettive dei servi",
+        "body": "Questo magnifico e arioso portico, sostenuto da sottili ed elegantissime colonne in marmo che lo rendono unico in città, abbraccia il sagrato di una delle chiese gotiche più belle di Bologna. È in assoluto uno dei luoghi più suggestivi dove passeggiare, specialmente al tramonto o durante il tradizionale e antico mercatino natalizio di Santa Lucia. Mandate una foto creativa che catturi l'infinita prospettiva delle colonne di questo portico.",
+        "config": {
+          "locationName": "Portico di Santa Maria dei Servi"
+        },
+        "points": 10,
+        "hint": "Dai che ce la fate!",
+        "block": "2",
+        "groups": [
+          "1",
+          "3",
+          "5",
+          "7"
+        ]
+      },
+      {
+        "id": "tappa-21",
+        "number": 21,
+        "type": "textMatch",
+        "title": "Gli archi della piazza",
+        "body": "Ricavata nell'ampio spazio che un tempo ospitava il profondo fossato della penultima cerchia muraria difensiva, oggi si presenta come una caratteristica e allungata piazza-viale alberata. È celebre e amatissima dai residenti per i suoi pittoreschi chioschi storici in ferro battuto, che ospitano colorate botteghe alimentari, fiorai e piccoli artigiani. Quanti sono gli archi dei portici di via san vitale che danno sulla piazza?",
+        "config": {
+          "expectedAnswer": "5",
+          "kind": "testo",
+          "locationName": "Piazza Aldrovandi"
+        },
+        "points": 10,
+        "hint": "grandi pari, dispari piccoli",
+        "block": "2",
+        "groups": [
+          "2",
+          "4",
+          "6",
+          "8"
+        ]
+      },
+      {
+        "id": "tappa-22",
+        "number": 22,
+        "type": "textMatch",
+        "title": "In the Ghetto",
+        "body": "Istituito a metà del Cinquecento, questo pittoresco e labirintico quartiere ospitò la comunità ebraica cittadina. Anche se fu utilizzato come luogo di segregazione per pochi anni, prima dell'espulsione, ha conservato fino a oggi un'atmosfera unica, intrisa di memoria storica e caratterizzata da viuzze strette e passaggi coperti. Trovate le particolari terracotte incastrate nei muri di Via dell'Inferno. Che forma hanno?",
+        "config": {
+          "expectedAnswer": "Mano",
+          "kind": "testo",
+          "locationName": "Ghetto Ebraico"
+        },
+        "points": 10,
+        "hint": "Dovresti averne due",
+        "block": "3",
+        "groups": [
+          "1",
+          "3",
+          "5",
+          "7"
+        ]
+      },
+      {
+        "id": "tappa-23",
+        "number": 23,
+        "type": "textMatch",
+        "title": "I materiali di Bologna",
+        "body": "Questo maestoso palazzo rappresenta un raro e prezioso esempio di architettura civile bolognese risalente al XIII secolo. La struttura conserva ancora tutto il sapore autentico dell'edilizia dell'epoca ed è unica per le sue caratteristiche costruttive, che permettono di osservare da vicino i materiali tipici utilizzati dai mastri muratori medievali. È l'unico portico medievale con muretto divisorio. Di che materiale è fatta la parte alta del muretto?",
+        "config": {
+          "expectedAnswer": "Selenite",
+          "kind": "testo",
+          "locationName": "Palazzo Grassi"
+        },
+        "points": 10,
+        "hint": "un vino liquoroso",
+        "block": "3"
+      },
+      {
+        "id": "tappa-24",
+        "number": 24,
+        "type": "photoApproval",
+        "title": "La Coronata",
+        "body": "Conosciuta anche con l'affascinante appellativo di \"la Coronata\", è senza dubbio una delle torri gentilizie meglio conservate dell'intero centro storico. Grazie alla sua posizione strategica, un tempo essenziale per la difesa familiare, offre oggi un punto di osservazione spettacolare sui tetti rossi e sul meraviglioso paesaggio circostante. Fate una foto alla torre. Dal basso verso l'alto!",
+        "config": {
+          "locationName": "Torre Prendiparte"
+        },
+        "points": 10,
+        "block": "3"
+      },
+      {
+        "id": "tappa-25",
+        "number": 25,
+        "type": "textMatch",
+        "title": "Ex fossato",
+        "body": "In epoca medievale questa zona si trovava all'esterno della seconda cinta muraria e lo spazio aperto era originariamente il fossato difensivo della città. Riempito e trasformato nei secoli successivi, è diventato uno snodo vitale che offre oggi un'ottima vista sull'abside di San Francesco, su Porta Nova e sui campanili della chiesa adiacente. Qual è il soggetto della statua al centro della piazza?",
+        "config": {
+          "expectedAnswer": "Immacolata Concezione",
+          "kind": "testo",
+          "locationName": "Piazza Malpighi"
+        },
+        "points": 10,
+        "hint": "Il platano di Bartolini",
+        "block": "4"
+      },
+      {
+        "id": "tappa-26",
+        "number": 26,
+        "type": "finale",
+        "title": "Ristorante Victoria",
+        "body": "Via Augusto Righi 9/C. Traguardo finale e meritatissimo di questa lunga e avvincente avventura tra i segreti del centro storico. Questo accogliente locale è il luogo ideale e conclusivo per potersi finalmente rilassare, confrontare le scoperte fatte lungo il tragitto, sfidare le altre squadre e celebrare in compagnia la fine di questo fantastico viaggio bolognese. Arrivo finale! Consegnate i risultati al tavolo della regia.",
+        "config": {
+          "locationName": "Ristorante Victoria"
+        },
+        "points": 0
+      },
+      {
+        "id": "tappa-27",
+        "number": 27,
+        "type": "textMatch",
+        "title": "Scrivevano note a margine",
+        "body": "Poste fuori dalle chiese, queste antiche arche sopraelevate ospitano le spoglie degli illustri maestri di diritto che resero celebre l'Università nel Medioevo. Veri e propri monumenti celebrativi, queste sepolture aeree ricordano a tutti i passanti il prestigio accademico della città e l'influenza intellettuale delle grandi famiglie dell'epoca. Osservando l'abside di San Francesco, la prima tomba a sinistra appartiene a una famiglia citata nell'Inferno. Quale?",
+        "config": {
+          "expectedAnswer": "Accursi",
+          "kind": "testo",
+          "locationName": "Tombe dei Glossatori"
+        },
+        "points": 10,
+        "hint": "Sembra il nome di un attore Bolognese",
+        "block": "4"
+      },
+      {
+        "id": "tappa-28",
+        "number": 28,
+        "type": "voucher",
+        "title": "Sosta meritata!",
+        "body": "I bar storici di Bologna non sono semplici locali, ma veri e propri salotti urbani dove si incrociano chiacchiere, idee e la rinomata convivialità emiliana. Rappresentano il luogo ideale per assaporare l'autentica atmosfera cittadina, ricaricare le energie dopo una lunga passeggiata e pianificare le mosse e le strategie successive della caccia. Consegnate il talloncino per una meritata pausa dissetante nel bar convenzionato.",
+        "config": {
+          "locationName": "Sosta meritata!"
+        },
+        "points": 0
+      },
+      {
+        "id": "tappa-29",
+        "number": 29,
+        "type": "textMatch",
+        "title": "Ah, i Savoia!",
+        "body": "Tracciata a fine Ottocento, questa monumentale arteria è oggi il principale asse dello shopping cittadino, ma non ha perso il suo fascino storico. Sotto le ampie volte dei suoi eleganti portici si celano ancora magnifici affreschi storici, antiche iscrizioni e storie curiose che aspettano solo di essere notate dai passanti più attenti. Trovate l'affresco all'inizio della via e completate la scritta \"Cannabis...\".",
+        "config": {
+          "expectedAnswer": "Protectio",
+          "kind": "testo",
+          "locationName": "Via Indipendenza"
+        },
+        "points": 10,
+        "hint": "Collega Piazza Maggiore con la Stazione",
+        "block": "3"
+      },
+      {
+        "id": "tappa-30",
+        "number": 30,
+        "type": "photoApproval",
+        "title": "Finestrella al rovescio!",
+        "body": "Questa pittoresca e affascinante zona di Bologna è profondamente legata all'antico e ramificato sistema di canali della città. Camminare qui offre ai visitatori una piccola ma suggestiva finestra su un passato industriale ormai scomparso, fatto di acque sotterranee, antichi lavatoi, setifici e laboriosi mulini azionati dalla corrente. Attenzione! Non è la famosa finestrella... andate a cercare un ponticello che affaccia sullo stesso canale e fate una foto",
+        "config": {
+          "locationName": "Via Malcontenti"
+        },
+        "points": 10,
+        "hint": "Quando non siete contenti...",
+        "block": "3"
+      },
+      {
+        "id": "tappa-31",
+        "number": 31,
+        "type": "textMatch",
+        "title": "Un volto biondo ed emaciato",
+        "body": "Antico e suggestivo dedalo di viuzze situato nel cuore del rione di Portanova, intriso di profonda storia medievale. Queste strade silenziose e strette erano un tempo la dimora di intellettuali, artisti e poeti che con i loro versi hanno gettato le basi della letteratura italiana, ispirando persino Dante. Qui sorgevano le case del poeta Guido Guinizzelli. Qual è la prima parola scritta sulla targa posta in suo ricordo?",
+        "config": {
+          "expectedAnswer": "qui",
+          "kind": "testo",
+          "locationName": "Via Volto Santo"
+        },
+        "points": 10,
+        "hint": "Dai che ce la fate!",
+        "block": "4"
+      },
+      {
+        "id": "tappa-32",
+        "number": 32,
+        "type": "photoApproval",
+        "title": "L'antica scuola",
+        "body": "Fondato nel XIV secolo per ospitare gli illustri studenti iberici dell'ateneo bolognese, è l'unico collegio universitario medievale ancora attivo in Europa. Le sue alte e invalicabili mura in mattoni rossi nascondono un magnifico cortile loggiato e una chiesa ricca di affreschi preziosi. Trovate il portale monumentale di questo imponente edificio e scattatevi una foto di gruppo davanti all'ingresso.",
+        "config": {
+          "locationName": "Collegio di Spagna"
+        },
+        "points": 20,
+        "hint": "Voy a la escuela",
+        "block": "4",
+        "groups": [
+          "2",
+          "4",
+          "6",
+          "8"
+        ]
+      },
+      {
+        "id": "tappa-33",
+        "number": 33,
+        "type": "photoApproval",
+        "title": "Dolcezze d'epoca",
+        "body": "Dal lontano 1796 questa storica bottega addolcisce il palato dei bolognesi, divenendo in seguito celebre in tutta Europa per le sue creazioni al cioccolato, come il famoso \"Cremino Fiat\". Ancora oggi, le sue vetrine eleganti rappresentano un vero e proprio pezzo di storia della tradizione dolciaria cittadina. Trovate la storica insegna del locale in Via de' Carbonesi e inviateci una prova fotografica.",
+        "config": {
+          "locationName": "Negozio Majani"
+        },
+        "points": 10,
+        "block": "4",
+        "groups": [
+          "2",
+          "4",
+          "6",
+          "8"
+        ]
+      },
+      {
+        "id": "tappa-34",
+        "number": 34,
+        "type": "photoApproval",
+        "title": "Aperitivo time!",
+        "body": "Antica e lunghissima strada popolare, un tempo quartiere operaio e ribelle, oggi è il cuore pulsante della vita bohémienne e della movida cittadina. È celebre in tutta Bologna per i suoi portici bassi, l'atmosfera verace, le serrande dipinte e le innumerevoli osterie che la animano dal tardo pomeriggio a notte fonda. Trova il Dalai Lama e scattagli una foto!",
+        "config": {
+          "locationName": "Via del Pratello"
+        },
+        "points": 10,
+        "block": "4",
+        "groups": [
+          "2",
+          "4",
+          "6",
+          "8"
+        ]
+      },
+      {
+        "id": "tappa-35",
+        "number": 35,
+        "type": "textMatch",
+        "title": "Non serve andarci!",
+        "body": "Conosciuta affettuosamente come la \"Porta Sacra\" o \"Porta dei Pellegrini\", la sua maestosa struttura a forma di castello segna l'inizio di un percorso spirituale unico al mondo. Da qui, infatti, parte il lunghissimo e ininterrotto portico che conduce fedeli e viandanti fin sulla cima del Colle della Guardia. Risolvete l'enigma: quante sono, secondo la tradizione, le arcate di questo famosissimo portico?",
+        "config": {
+          "expectedAnswer": "666",
+          "kind": "testo",
+          "locationName": "Porta Saragozza"
+        },
+        "points": 20,
+        "hint": "Città in Spagna",
+        "block": "4",
+        "groups": [
+          "2",
+          "4",
+          "6",
+          "8"
+        ]
+      }
+    ]
+  },
+  "rules": {}
+}

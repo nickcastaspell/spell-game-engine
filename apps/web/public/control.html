@@ -1,0 +1,572 @@
+<!doctype html>
+<html lang="it">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Regia — Spell Game Engine</title>
+  <style>
+    body { font-family: system-ui, sans-serif; max-width: 900px; margin: 2rem auto; padding: 0 1rem; color: #1a1a2e; }
+    h1 { font-size: 1.3rem; }
+    fieldset { border: 1px solid #ddd; border-radius: 8px; margin: 1rem 0; }
+    label { display: block; font-size: 0.85rem; color: #555; margin-top: 0.5rem; }
+    input, select, button { font-size: 0.95rem; padding: 0.5rem; margin: 0.2rem 0.2rem 0.2rem 0; border-radius: 6px; border: 1px solid #ccc; }
+    button { background: #4338ca; color: white; border: none; cursor: pointer; font-weight: 600; }
+    button.secondary { background: #6b7280; }
+    button.danger { background: #b91c1c; }
+    button:disabled { background: #ccc; cursor: default; }
+    table { width: 100%; border-collapse: collapse; margin-top: 1rem; }
+    th, td { text-align: left; padding: 0.4rem 0.5rem; border-bottom: 1px solid #eee; font-size: 0.9rem; }
+    .dot { display: inline-block; width: 0.6rem; height: 0.6rem; border-radius: 50%; margin-right: 0.3rem; }
+    .dot.on { background: #22c55e; }
+    .dot.off { background: #d1d5db; }
+    #err { color: #b91c1c; }
+    .row { display: flex; gap: 0.5rem; flex-wrap: wrap; align-items: center; }
+    /* Elementi visibili SOLO se il backend espone /api/dev/* (ambiente non-production, vedi app.ts) */
+    .dev-only { display: none; }
+    #devBanner {
+      display: none;
+      background: #fde68a; color: #78350f; font-weight: 700;
+      padding: 0.6rem 1rem; border-radius: 8px; margin-bottom: 1rem;
+      border: 1px solid #f59e0b;
+    }
+  </style>
+</head>
+<body>
+  <div id="devBanner">⚠ Development Mode — reset, duplicazione ed eliminazione sessioni sono attivi. Non sono disponibili in produzione.</div>
+
+  <h1>Regia</h1>
+
+  <fieldset>
+    <legend>Connessione</legend>
+    <label>Token regia</label>
+    <input id="token" placeholder="nick" />
+    <button id="reloadSessionsBtn" class="secondary dev-only">Aggiorna elenco sessioni</button>
+  </fieldset>
+
+  <fieldset class="dev-only" id="archiveFieldset">
+    <legend>Sessioni</legend>
+    <div id="sessionsList"><p>Nessuna sessione.</p></div>
+  </fieldset>
+
+  <fieldset id="createFieldset">
+    <legend>1. Crea sessione</legend>
+    <label>gameSlug</label>
+    <input id="gameSlug" value="less-is-more" />
+    <label>Nome sessione</label>
+    <input id="sessionName" value="Sessione aula" />
+    <button id="createBtn">Crea sessione</button>
+    <p id="err"></p>
+  </fieldset>
+
+  <div id="managePanel" style="display:none">
+    <p>Sessione: <code id="sid"></code> — stato: <strong id="sstatus"></strong></p>
+
+    <div class="row dev-only" style="margin-bottom: 0.5rem;">
+      <button id="resetSessionBtn" class="danger">🔄 Reset Sessione</button>
+      <button id="newGameBtn">🎮 Nuova partita</button>
+    </div>
+
+    <fieldset>
+      <legend>2. Tavoli</legend>
+      <div class="row">
+        <input id="teamCount" type="number" value="20" min="1" max="50" style="width:5rem" />
+        <button id="genTeamsBtn">Genera tavoli</button>
+      </div>
+    </fieldset>
+
+    <fieldset>
+      <legend>3. Ciclo di vita</legend>
+      <div class="row" id="statusButtons"></div>
+    </fieldset>
+
+    <fieldset>
+      <legend>4. Fasi</legend>
+      <!-- v5.1: niente più id di fase scritto a mano qui: la lista viene
+           letta dal backend (dashboard.phases), che la legge a sua volta
+           dalla game definition del gioco selezionato. -->
+      <div class="row" id="phaseButtons"></div>
+    </fieldset>
+
+    <fieldset>
+      <legend>Dashboard tavoli</legend>
+      <p id="summary"></p>
+      <table>
+        <thead><tr><th>Tavolo</th><th>Codice</th><th>Conn.</th><th>Inviato</th><th>Punteggio</th><th>Azione</th></tr></thead>
+        <tbody id="teamsBody"></tbody>
+      </table>
+    </fieldset>
+
+    <!-- Visibile solo quando la sessione ha una fase "itinerary" (es. "Il
+         mistero della città"): non è un'altra funzionalità dev, è
+         semplicemente inutile per giochi che non hanno questa modalità
+         (es. Less is More), quindi resta nascosto finché non serve. -->
+    <fieldset id="itineraryFieldset" style="display:none">
+      <legend>5. Itinerario (percorso per squadra)</legend>
+
+      <div class="row">
+        <label style="margin:0">Fase itinerario</label>
+        <select id="itineraryPhaseSelect"></select>
+        <button id="generateRoutesBtn">Genera percorsi</button>
+        <span id="generateRoutesResult"></span>
+      </div>
+
+      <h4>Facilitatori</h4>
+      <div class="row">
+        <input id="facilitatorName" placeholder="Nome (es. Mauro)" style="width:10rem" />
+        <span id="facilitatorTeamChecks"></span>
+        <button id="createFacilitatorBtn">Crea facilitatore</button>
+      </div>
+      <table>
+        <thead><tr><th>Nome</th><th>Token</th><th>Squadre</th></tr></thead>
+        <tbody id="facilitatorsBody"></tbody>
+      </table>
+
+      <h4>Foto in attesa di approvazione</h4>
+      <div id="pendingPhotos"><p>Nessuna foto in attesa.</p></div>
+    </fieldset>
+  </div>
+
+  <script>
+    const STATUS_FLOW = { DRAFT: "LOBBY", LOBBY: "RUNNING", RUNNING: "PAUSED", PAUSED: "RUNNING" };
+    let sid = null;
+    let pollTimer = null;
+    let devMode = false;
+
+    function token() {
+      return document.getElementById("token").value.trim();
+    }
+
+    async function api(path, opts = {}) {
+      const res = await fetch(path, {
+        ...opts,
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: "Bearer " + token(),
+          ...(opts.headers || {}),
+        },
+      });
+      const body = await res.json();
+      if (!res.ok || !body.ok) throw new Error(body.error?.message || "Errore");
+      return body.data;
+    }
+
+    // Rileva se gli strumenti dev sono disponibili SUL BACKEND (non solo
+    // nella UI): se /api/dev/* non è montato (produzione) risponde 404 anche
+    // senza token valido; se è montato risponde 401 finché non si autentica.
+    // In entrambi i casi non serve un token corretto per capire quale dei
+    // due siamo — è proprio questo che rende il rilevamento affidabile.
+    async function detectDevMode() {
+      try {
+        const res = await fetch("/api/dev/sessions", { headers: { "Content-Type": "application/json" } });
+        devMode = res.status !== 404;
+      } catch {
+        devMode = false;
+      }
+      document.querySelectorAll(".dev-only").forEach((el) => {
+        el.style.display = devMode ? "" : "none";
+      });
+      document.getElementById("devBanner").style.display = devMode ? "block" : "none";
+      if (devMode) loadSessionsArchive();
+    }
+
+    // --- Archivio sessioni (solo dev) ---
+
+    async function loadSessionsArchive() {
+      const box = document.getElementById("sessionsList");
+      try {
+        const sessions = await api("/api/dev/sessions");
+        if (sessions.length === 0) {
+          box.innerHTML = "<p>Nessuna sessione.</p>";
+          return;
+        }
+        box.innerHTML = sessions
+          .map((s) => {
+            const canReopen = s.status === "COMPLETED";
+            const canArchive = s.status === "COMPLETED";
+            return `
+            <div class="row" style="border-bottom:1px solid #eee; padding:0.4rem 0;">
+              <span style="min-width:14rem"><strong>${s.name}</strong> <small>(${s.gameName})</small></span>
+              <span>${s.status}</span>
+              <span><small>${s.createdAt}</small></span>
+              <span>${s.teamCount} tavoli</span>
+              <button onclick="openSessionInDashboard('${s.id}')">Apri</button>
+              <button class="secondary" onclick="duplicateSessionArchive('${s.id}')">Duplica</button>
+              <button class="secondary" onclick="archiveSessionArchive('${s.id}')" ${canArchive ? "" : 'disabled title="solo da COMPLETED"'}>Archivia</button>
+              ${canReopen ? `<button class="secondary" onclick="reopenSessionArchive('${s.id}')">Riapri</button>` : ""}
+              <button class="danger" onclick="deleteSessionArchive('${s.id}')">Elimina (DEV)</button>
+            </div>`;
+          })
+          .join("");
+      } catch (e) {
+        box.innerHTML = `<p id="err">${e.message}</p>`;
+      }
+    }
+
+    async function duplicateSessionArchive(id) {
+      try {
+        await api(`/api/dev/sessions/${id}/duplicate`, { method: "POST", body: JSON.stringify({}) });
+        loadSessionsArchive();
+      } catch (e) {
+        alert(e.message);
+      }
+    }
+
+    async function archiveSessionArchive(id) {
+      try {
+        // "Archivia" non è uno strumento dev a sé: riusa la transizione di
+        // stato ARCHIVED già prevista dal lifecycle del motore (COMPLETED ->
+        // ARCHIVED, vedi packages/game-core/src/lifecycle.ts) tramite
+        // l'endpoint standard della regia, non uno dev-only.
+        await api(`/api/control/sessions/${id}/status`, {
+          method: "POST",
+          body: JSON.stringify({ status: "ARCHIVED" }),
+        });
+        loadSessionsArchive();
+      } catch (e) {
+        alert(e.message);
+      }
+    }
+
+    async function reopenSessionArchive(id) {
+      if (!confirm("Riportare questa sessione COMPLETED a DRAFT? Solo per sviluppo.")) return;
+      try {
+        await api(`/api/dev/sessions/${id}/reopen`, { method: "POST" });
+        loadSessionsArchive();
+        if (sid === id) refreshDashboard();
+      } catch (e) {
+        alert(e.message);
+      }
+    }
+
+    async function deleteSessionArchive(id) {
+      if (!confirm("Eliminare definitivamente questa sessione, i suoi tavoli e tutti gli eventi collegati?")) return;
+      try {
+        await api(`/api/dev/sessions/${id}`, { method: "DELETE" });
+        if (sid === id) {
+          sid = null;
+          document.getElementById("managePanel").style.display = "none";
+          if (pollTimer) clearInterval(pollTimer);
+        }
+        loadSessionsArchive();
+      } catch (e) {
+        alert(e.message);
+      }
+    }
+
+    // Apre una sessione esistente nel pannello di gestione (senza crearne una nuova).
+    function openSessionInDashboard(id) {
+      sid = id;
+      document.getElementById("err").textContent = "";
+      document.getElementById("sid").textContent = sid;
+      document.getElementById("managePanel").style.display = "block";
+      if (pollTimer) clearInterval(pollTimer);
+      pollTimer = setInterval(refreshDashboard, 4000);
+      refreshDashboard();
+    }
+
+    // --- Strumenti dev sulla sessione aperta ---
+
+    async function resetSession() {
+      if (!sid) return;
+      if (!confirm("Azzerare submission, punteggi ed eventi di questa sessione e riportarla a DRAFT? I tavoli restano.")) return;
+      try {
+        await api(`/api/dev/sessions/${sid}/reset`, { method: "POST" });
+        refreshDashboard();
+        loadSessionsArchive();
+      } catch (e) {
+        alert(e.message);
+      }
+    }
+
+    async function newGame() {
+      if (!sid) return;
+      try {
+        const copy = await api(`/api/dev/sessions/${sid}/duplicate`, { method: "POST", body: JSON.stringify({}) });
+        loadSessionsArchive();
+        openSessionInDashboard(copy.id);
+      } catch (e) {
+        alert(e.message);
+      }
+    }
+
+    // --- Flusso esistente (creazione, tavoli, stato, fasi) ---
+
+    async function createSession() {
+      document.getElementById("err").textContent = "";
+      try {
+        const session = await api("/api/control/sessions", {
+          method: "POST",
+          body: JSON.stringify({
+            gameSlug: document.getElementById("gameSlug").value,
+            name: document.getElementById("sessionName").value,
+          }),
+        });
+        openSessionInDashboard(session.id);
+        if (devMode) loadSessionsArchive();
+      } catch (e) {
+        document.getElementById("err").textContent = e.message;
+      }
+    }
+
+    function renderStatusButtons(current) {
+      document.getElementById("sstatus").textContent = current;
+      const box = document.getElementById("statusButtons");
+      const all = ["DRAFT", "LOBBY", "RUNNING", "PAUSED", "COMPLETED", "ARCHIVED"];
+      box.innerHTML = all
+        .map((s) => `<button data-status="${s}" ${s === current ? "disabled" : ""}>${s}</button>`)
+        .join("");
+      box.querySelectorAll("button").forEach((b) =>
+        b.addEventListener("click", () => changeStatus(b.dataset.status))
+      );
+    }
+
+    async function changeStatus(status) {
+      try {
+        const session = await api(`/api/control/sessions/${sid}/status`, {
+          method: "POST",
+          body: JSON.stringify({ status }),
+        });
+        renderStatusButtons(session.status);
+      } catch (e) {
+        alert(e.message);
+      }
+    }
+
+    async function genTeams() {
+      const count = Number(document.getElementById("teamCount").value);
+      try {
+        await api(`/api/control/sessions/${sid}/teams`, {
+          method: "POST",
+          body: JSON.stringify({ count }),
+        });
+        refreshDashboard();
+      } catch (e) {
+        alert(e.message);
+      }
+    }
+
+    async function openPhase(phaseId) {
+      try {
+        await api(`/api/control/sessions/${sid}/phase`, {
+          method: "POST",
+          body: JSON.stringify({ action: "open", phaseId }),
+        });
+        refreshDashboard();
+      } catch (e) {
+        alert(e.message);
+      }
+    }
+
+    async function closePhase(phaseId) {
+      try {
+        await api(`/api/control/sessions/${sid}/phase`, {
+          method: "POST",
+          body: JSON.stringify({ action: "close", phaseId }),
+        });
+        refreshDashboard();
+      } catch (e) {
+        alert(e.message);
+      }
+    }
+
+    async function reopenTeam(teamId, phaseId) {
+      try {
+        await api(`/api/control/sessions/${sid}/phase`, {
+          method: "POST",
+          body: JSON.stringify({ action: "reopen_team", phaseId, teamId }),
+        });
+        refreshDashboard();
+      } catch (e) {
+        alert(e.message);
+      }
+    }
+
+    // Fasi lette dal backend (dashboard.phases), non più scritte a mano
+    // nell'HTML: un secondo gioco con fasi diverse funziona qui senza
+    // toccare questo file.
+    function renderPhaseButtons(dashboard) {
+      const box = document.getElementById("phaseButtons");
+      box.innerHTML = dashboard.phases
+        .map((p) => {
+          const isCurrent = p.id === dashboard.currentPhaseId;
+          const isOpen = isCurrent && dashboard.phaseStatus === "OPEN";
+          return `
+            <span style="margin-right:1rem">
+              <strong>${p.title}</strong>
+              ${isCurrent ? `<em>(${dashboard.phaseStatus})</em>` : ""}
+              <button data-phase="${p.id}" data-op="open" ${isOpen ? "disabled" : ""}>Apri</button>
+              <button data-phase="${p.id}" data-op="close" class="secondary" ${!isOpen ? "disabled" : ""}>Chiudi</button>
+            </span>`;
+        })
+        .join("");
+      box.querySelectorAll("button").forEach((b) => {
+        b.addEventListener("click", () => {
+          if (b.dataset.op === "open") openPhase(b.dataset.phase);
+          else closePhase(b.dataset.phase);
+        });
+      });
+    }
+
+    // --- Itinerario (percorso per squadra, es. "Il mistero della città") ---
+
+    let currentDashboardTeams = []; // usato per le checkbox squadre del form facilitatore
+
+    function renderItineraryPanel(d) {
+      const fieldset = document.getElementById("itineraryFieldset");
+      const itineraryPhases = d.phases.filter((p) => p.mode === "itinerary");
+      if (itineraryPhases.length === 0) {
+        fieldset.style.display = "none";
+        return;
+      }
+      fieldset.style.display = "block";
+      currentDashboardTeams = d.teams;
+
+      const select = document.getElementById("itineraryPhaseSelect");
+      const previousValue = select.value;
+      select.innerHTML = itineraryPhases.map((p) => `<option value="${p.id}">${p.title}</option>`).join("");
+      if (itineraryPhases.some((p) => p.id === previousValue)) select.value = previousValue;
+
+      const checksBox = document.getElementById("facilitatorTeamChecks");
+      checksBox.innerHTML = d.teams
+        .map(
+          (t, idx) =>
+            `<label style="display:inline-block; font-weight:400; margin-right:0.5rem">
+               <input type="checkbox" value="${t.teamId}" data-team-check /> ${idx + 1}. ${t.name}
+             </label>`
+        )
+        .join("");
+
+      loadFacilitators();
+      loadPendingPhotos();
+    }
+
+    async function generateRoutes() {
+      const phaseId = document.getElementById("itineraryPhaseSelect").value;
+      const resultEl = document.getElementById("generateRoutesResult");
+      if (!phaseId) return;
+      try {
+        const res = await api(`/api/control/sessions/${sid}/itinerary/generate-routes`, {
+          method: "POST",
+          body: JSON.stringify({ phaseId }),
+        });
+        resultEl.textContent = `Percorsi generati per ${res.teams.length} squadre.`;
+      } catch (e) {
+        resultEl.textContent = "";
+        alert(e.message);
+      }
+    }
+
+    async function loadFacilitators() {
+      try {
+        const facilitators = await api(`/api/control/sessions/${sid}/facilitators`);
+        const teamNameById = Object.fromEntries(currentDashboardTeams.map((t) => [t.teamId, t.name]));
+        document.getElementById("facilitatorsBody").innerHTML = facilitators
+          .map(
+            (f) => `
+          <tr>
+            <td>${f.name}</td>
+            <td><code>${f.token}</code></td>
+            <td>${f.teamIds.length === 0 ? "tutte" : f.teamIds.map((id) => teamNameById[id] ?? id).join(", ")}</td>
+          </tr>`
+          )
+          .join("");
+      } catch (e) {
+        // token errato o sessione non trovata: ignora al prossimo tick, come refreshDashboard
+      }
+    }
+
+    async function createFacilitator() {
+      const name = document.getElementById("facilitatorName").value.trim();
+      if (!name) return alert("Il nome del facilitatore è obbligatorio.");
+      const teamIds = Array.from(document.querySelectorAll("[data-team-check]:checked")).map((el) => el.value);
+      try {
+        await api(`/api/control/sessions/${sid}/facilitators`, {
+          method: "POST",
+          body: JSON.stringify({ name, teamIds }),
+        });
+        document.getElementById("facilitatorName").value = "";
+        document.querySelectorAll("[data-team-check]").forEach((el) => (el.checked = false));
+        loadFacilitators();
+      } catch (e) {
+        alert(e.message);
+      }
+    }
+
+    async function loadPendingPhotos() {
+      const box = document.getElementById("pendingPhotos");
+      try {
+        const photos = await api(`/api/control/sessions/${sid}/itinerary/photos/pending`);
+        if (photos.length === 0) {
+          box.innerHTML = "<p>Nessuna foto in attesa.</p>";
+          return;
+        }
+        box.innerHTML = photos
+          .map(
+            (p) => `
+          <div class="row" style="border-bottom:1px solid #eee; padding:0.5rem 0;">
+            <img src="/api/control/sessions/${sid}/itinerary/photos/${p.id}/image" alt="foto"
+                 style="width:5rem; height:5rem; object-fit:cover; border-radius:6px; border:1px solid #ddd"
+                 onerror="this.style.display='none'" />
+            <span><strong>${p.teamName}</strong> — tappa ${p.stepId} (tentativo ${p.attempt})</span>
+            <button onclick="decidePhoto('${p.id}', 'approved')">✅ Approva</button>
+            <button class="danger" onclick="decidePhoto('${p.id}', 'rejected')">❌ Rigetta</button>
+          </div>`
+          )
+          .join("");
+      } catch (e) {
+        box.innerHTML = `<p id="err">${e.message}</p>`;
+      }
+    }
+
+    async function decidePhoto(photoId, decision) {
+      try {
+        await api(`/api/control/sessions/${sid}/itinerary/photos/${photoId}/decide`, {
+          method: "POST",
+          body: JSON.stringify({ decision }),
+        });
+        loadPendingPhotos();
+        refreshDashboard();
+      } catch (e) {
+        alert(e.message);
+      }
+    }
+
+    async function refreshDashboard() {
+      if (!sid) return;
+      try {
+        const d = await api(`/api/control/sessions/${sid}/dashboard`);
+        renderStatusButtons(d.status);
+        renderPhaseButtons(d);
+        renderItineraryPanel(d);
+        document.getElementById("summary").textContent =
+          `Invii: ${d.submittedCount}/${d.totalTeams}` + (d.allSubmitted ? " — tutti i tavoli hanno inviato" : "");
+        document.getElementById("teamsBody").innerHTML = d.teams
+          .map(
+            (t) => `
+          <tr>
+            <td>${t.name}</td>
+            <td><code>${t.accessCode}</code></td>
+            <td><span class="dot ${t.connected ? "on" : "off"}"></span></td>
+            <td>${t.submitted ? "✅" : "—"}</td>
+            <td>${t.score}</td>
+            <td>${t.submitted ? `<button class="secondary" onclick="reopenTeam('${t.teamId}', '${d.currentPhaseId}')">Riapri</button>` : ""}</td>
+          </tr>`
+          )
+          .join("");
+      } catch (e) {
+        // token errato o sessione non trovata: ignora al prossimo tick
+      }
+    }
+
+    document.getElementById("generateRoutesBtn").addEventListener("click", generateRoutes);
+    document.getElementById("createFacilitatorBtn").addEventListener("click", createFacilitator);
+    document.getElementById("createBtn").addEventListener("click", createSession);
+    document.getElementById("genTeamsBtn").addEventListener("click", genTeams);
+    document.getElementById("reloadSessionsBtn").addEventListener("click", loadSessionsArchive);
+    document.getElementById("resetSessionBtn").addEventListener("click", resetSession);
+    document.getElementById("newGameBtn").addEventListener("click", newGame);
+
+    detectDevMode();
+  </script>
+</body>
+</html>

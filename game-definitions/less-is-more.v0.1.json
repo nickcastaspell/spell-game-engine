@@ -1,0 +1,49 @@
+{
+  "schemaVersion": "0.1",
+  "game": {
+    "id": "less-is-more",
+    "name": "Less is More",
+    "defaultLocale": "it"
+  },
+  "roles": ["control", "team"],
+  "settings": {
+    "teamsMin": 2,
+    "teamsMax": 20,
+    "oneDevicePerTeam": true,
+    "showLeaderboard": true
+  },
+  "phases": [
+    {
+      "id": "conoscere",
+      "title": "Conoscere",
+      "mode": "single_submission",
+      "activity": {
+        "id": "classify-collaborators",
+        "type": "classification",
+        "title": "Classificate i collaboratori",
+        "config": {
+          "itemsSource": "collaborators",
+          "categories": ["A", "B", "C", "D"],
+          "required": true,
+          "pointsPerCorrect": 10
+        }
+      },
+      "completion": {
+        "type": "all_teams_submitted"
+      }
+    }
+  ],
+  "content": {
+    "collaborators": [
+      { "id": "c1", "label": "Anna - Responsabile turni", "expectedCategory": "A" },
+      { "id": "c2", "label": "Marco - Magazzino", "expectedCategory": "B" },
+      { "id": "c3", "label": "Giulia - Customer care", "expectedCategory": "A" },
+      { "id": "c4", "label": "Luca - Manutenzione", "expectedCategory": "C" },
+      { "id": "c5", "label": "Sara - Amministrazione", "expectedCategory": "B" },
+      { "id": "c6", "label": "Paolo - Junior neoassunto", "expectedCategory": "D" }
+    ]
+  },
+  "rules": {
+    "classificationScoring": "lessIsMore.classification.v1"
+  }
+}

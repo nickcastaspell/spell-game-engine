@@ -1,0 +1,171 @@
+// ATTENZIONE: file NON usato dal runtime (v5.1). Il prototipo persiste con
+// node:sqlite (apps/server/src/lib/db.ts + repo.ts, query dirette, nessun
+// ORM) perché l'ambiente di sviluppo blocca il download del binario
+// dell'engine Prisma. Questo schema resta come riferimento per un
+// eventuale deploy reale su Postgres: descrive lo stesso modello dati
+// logico implementato in db.ts, ma va tenuto sincronizzato a mano se lo
+// schema cambia — non c'è alcuna generazione automatica da qui.
+//
+// Modello dati minimo (spec §7).
+// SQLite per prototipo locale (spec §17): "SQLite ammesso solo per
+// prototipo locale usa-e-getta". Passare a Postgres cambiando solo
+// `provider` e `url`, lo schema logico non cambia.
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+model Game {
+  id        String   @id @default(cuid())
+  slug      String   @unique
+  name      String
+  status    String   @default("active")
+  createdAt DateTime @default(now())
+
+  versions GameVersion[]
+
+  @@map("game")
+}
+
+model GameVersion {
+  id             String    @id @default(cuid())
+  gameId         String
+  version        String
+  definitionJson String
+  publishedAt    DateTime?
+  createdAt      DateTime  @default(now())
+
+  game     Game      @relation(fields: [gameId], references: [id])
+  sessions Session[]
+
+  @@unique([gameId, version])
+  @@map("game_version")
+}
+
+model Session {
+  id              String   @id @default(cuid())
+  gameVersionId   String
+  name            String
+  status          String   @default("DRAFT")
+  currentPhaseId  String?
+  currentRound    Int      @default(1)
+  phaseStatus     String   @default("CLOSED")
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  gameVersion GameVersion   @relation(fields: [gameVersionId], references: [id])
+  teams       Team[]
+  submissions Submission[]
+  effectEvents EffectEvent[]
+  scoreEvents  ScoreEvent[]
+  auditEvents  AuditEvent[]
+
+  @@map("session")
+}
+
+model Team {
+  id         String   @id @default(cuid())
+  sessionId  String
+  name       String
+  accessCode String   @unique
+  status     String   @default("PENDING")
+  createdAt  DateTime @default(now())
+
+  session        Session         @relation(fields: [sessionId], references: [id])
+  deviceSessions DeviceSession[]
+  teamState      TeamState?
+  submissions    Submission[]
+  effectEvents   EffectEvent[]
+  scoreEvents    ScoreEvent[]
+
+  @@map("team")
+}
+
+model DeviceSession {
+  id         String    @id @default(cuid())
+  teamId     String
+  tokenHash  String    @unique
+  lastSeenAt DateTime  @default(now())
+  revokedAt  DateTime?
+  createdAt  DateTime  @default(now())
+
+  team Team @relation(fields: [teamId], references: [id])
+
+  @@map("device_session")
+}
+
+model TeamState {
+  teamId    String   @id
+  stateJson String
+  version   Int      @default(0)
+  updatedAt DateTime @updatedAt
+
+  team Team @relation(fields: [teamId], references: [id])
+
+  @@map("team_state")
+}
+
+model Submission {
+  id             String    @id @default(cuid())
+  sessionId      String
+  teamId         String
+  activityId     String
+  payloadJson    String
+  status         String    @default("pending")
+  idempotencyKey String    @unique
+  submittedAt    DateTime  @default(now())
+
+  session Session @relation(fields: [sessionId], references: [id])
+  team    Team    @relation(fields: [teamId], references: [id])
+
+  @@map("submission")
+}
+
+model EffectEvent {
+  id                 String   @id @default(cuid())
+  sessionId          String
+  teamId             String
+  type               String
+  payloadJson        String
+  sourceSubmissionId String?
+  createdAt          DateTime @default(now())
+
+  session Session @relation(fields: [sessionId], references: [id])
+  team    Team    @relation(fields: [teamId], references: [id])
+
+  @@map("effect_event")
+}
+
+model ScoreEvent {
+  id        String   @id @default(cuid())
+  sessionId String
+  teamId    String
+  amount    Int
+  reason    String
+  sourceId  String?
+  createdAt DateTime @default(now())
+
+  session Session @relation(fields: [sessionId], references: [id])
+  team    Team    @relation(fields: [teamId], references: [id])
+
+  @@map("score_event")
+}
+
+model AuditEvent {
+  id          String   @id @default(cuid())
+  actorType   String
+  actorId     String
+  sessionId   String?
+  action      String
+  payloadJson String
+  createdAt   DateTime @default(now())
+
+  session Session? @relation(fields: [sessionId], references: [id])
+
+  @@map("audit_event")
+}

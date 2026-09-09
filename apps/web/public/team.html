@@ -1,0 +1,337 @@
+<!doctype html>
+<html lang="it">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Tavolo — Spell Game Engine</title>
+  <style>
+    body { font-family: system-ui, sans-serif; max-width: 520px; margin: 2rem auto; padding: 0 1rem; color: #1a1a2e; }
+    h1 { font-size: 1.3rem; }
+    input, select, button { font-size: 1rem; padding: 0.6rem; margin: 0.3rem 0; width: 100%; box-sizing: border-box; border-radius: 6px; border: 1px solid #ccc; }
+    button { background: #4338ca; color: white; border: none; cursor: pointer; font-weight: 600; }
+    button:disabled { background: #aaa; cursor: default; }
+    .item { border: 1px solid #ddd; border-radius: 8px; padding: 0.7rem; margin: 0.5rem 0; }
+    .badge { display: inline-block; padding: 0.2rem 0.6rem; border-radius: 999px; font-size: 0.8rem; font-weight: 600; }
+    .badge.open { background: #dcfce7; color: #166534; }
+    .badge.closed { background: #fee2e2; color: #991b1b; }
+    #status { margin: 1rem 0; }
+    #err { color: #b91c1c; }
+    .hidden { display: none; }
+  </style>
+</head>
+<body>
+  <h1>Tavolo</h1>
+
+  <div id="login">
+    <label for="code">Codice tavolo</label>
+    <input id="code" placeholder="ES. AB12CD" autocomplete="off" />
+    <button id="loginBtn">Entra</button>
+    <p id="err"></p>
+  </div>
+
+  <div id="game" class="hidden">
+    <p><strong id="teamName"></strong> — <span id="statusBadge" class="badge"></span></p>
+    <div id="status"></div>
+    <div id="activity"></div>
+  </div>
+
+  <script>
+    const API = "";
+    let token = localStorage.getItem("spell_team_token");
+    let teamName = localStorage.getItem("spell_team_name");
+    let pollTimer = null;
+
+    async function api(path, opts = {}) {
+      const res = await fetch(API + path, {
+        ...opts,
+        headers: {
+          "Content-Type": "application/json",
+          ...(token ? { Authorization: "Bearer " + token } : {}),
+          ...(opts.headers || {}),
+        },
+      });
+      const body = await res.json();
+      if (!res.ok || !body.ok) {
+        throw new Error(body.error?.message || "Errore");
+      }
+      return body.data;
+    }
+
+    async function login() {
+      const code = document.getElementById("code").value.trim().toUpperCase();
+      document.getElementById("err").textContent = "";
+      try {
+        const data = await api("/api/team/login", {
+          method: "POST",
+          body: JSON.stringify({ accessCode: code }),
+        });
+        token = data.token;
+        teamName = data.teamName;
+        localStorage.setItem("spell_team_token", token);
+        localStorage.setItem("spell_team_name", teamName);
+        showGame();
+      } catch (e) {
+        document.getElementById("err").textContent = e.message;
+      }
+    }
+
+    function showGame() {
+      document.getElementById("login").classList.add("hidden");
+      document.getElementById("game").classList.remove("hidden");
+      document.getElementById("teamName").textContent = teamName;
+      poll();
+      pollTimer = setInterval(poll, 4000);
+    }
+
+    let renderedActivityKey = null; // vedi renderState: evita di ricostruire il form ad ogni poll
+
+    async function poll() {
+      try {
+        const state = await api("/api/team/state");
+        if (!state.activity && state.currentPhaseId) {
+          try {
+            const itin = await api("/api/team/itinerary/status");
+            document.getElementById("statusBadge").textContent = "In percorso";
+            document.getElementById("statusBadge").className = "badge open";
+            document.getElementById("status").textContent = `Punteggio: ${itin.score}`;
+            renderItinerary(itin);
+            return;
+          } catch (e) {
+            // non è una fase itinerary (400) o nessuna fase corrente (409): rendering normale sotto
+          }
+        }
+        renderState(state);
+      } catch (e) {
+        // token scaduto/revocato (es. login da un altro dispositivo)
+        if (String(e.message).toLowerCase().includes("token")) {
+          localStorage.removeItem("spell_team_token");
+          clearInterval(pollTimer);
+          location.reload();
+        }
+      }
+    }
+
+    function renderState(state) {
+      const badge = document.getElementById("statusBadge");
+      badge.textContent = state.phaseStatus === "OPEN" ? "Fase aperta" : "In attesa della regia";
+      badge.className = "badge " + (state.phaseStatus === "OPEN" ? "open" : "closed");
+
+      const statusEl = document.getElementById("status");
+      statusEl.textContent = `Punteggio: ${state.score}`;
+
+      // Il poll gira ogni 4s anche mentre il tavolo sta ancora compilando.
+      // Se non filtriamo qui, ogni tick ricostruisce il form (innerHTML)
+      // e cancella le categorie già assegnate — bug reale segnalato in aula.
+      // Ridisegniamo il form SOLO quando cambia qualcosa di rilevante
+      // (fase aperta/chiusa, invio effettuato, attività diversa), non ad
+      // ogni singolo poll.
+      const key = JSON.stringify({
+        phaseId: state.currentPhaseId,
+        activityId: state.activityId,
+        submitted: state.submitted,
+        phaseStatus: state.phaseStatus,
+        hasActivity: Boolean(state.activity),
+      });
+      if (key === renderedActivityKey) return;
+      renderedActivityKey = key;
+
+      const el = document.getElementById("activity");
+      if (!state.activity) {
+        el.innerHTML = "<p>Nessuna attività attiva al momento.</p>";
+        return;
+      }
+      if (state.submitted) {
+        el.innerHTML = "<p><strong>Invio registrato.</strong> Attendi la regia per il prossimo passo.</p>";
+        return;
+      }
+      if (state.phaseStatus !== "OPEN") {
+        el.innerHTML = "<p>La fase non è ancora aperta.</p>";
+        return;
+      }
+      const renderer = activityRenderers[state.activity.type];
+      if (renderer) {
+        renderer(el, state.activity, state.activityId);
+      } else {
+        el.innerHTML = "<p>Tipo di attività non supportato da questa interfaccia.</p>";
+      }
+    }
+
+    // --- Itinerario (percorso per squadra, es. "Il mistero della città") ---
+    // start/buono avanzano da soli (nessun input dal tavolo): li inviamo
+    // in automatico non appena diventano la tappa corrente, una sola
+    // volta per tappa (renderedItineraryStepId evita il doppio invio ad
+    // ogni tick di poll, stesso principio di renderedActivityKey sopra).
+    let renderedItineraryStepId = null;
+    let lastVoucherToken = null;
+
+    function renderItinerary(itin) {
+      const el = document.getElementById("activity");
+
+      if (itin.completed) {
+        renderedItineraryStepId = "__completed__";
+        el.innerHTML = `<h3>🏁 Percorso completato!</h3><p>Punteggio finale: <strong>${itin.score}</strong></p>`;
+        return;
+      }
+
+      const step = itin.step;
+      const progress = `Tappa ${itin.position} di ${itin.totalSteps}`;
+
+      if (step.view.type === "start" || step.view.type === "voucher") {
+        if (renderedItineraryStepId !== step.id) {
+          renderedItineraryStepId = step.id;
+          submitItinerary(step.id, {});
+        }
+        el.innerHTML = `<p><small>${progress}</small></p><h3>${step.title}</h3><p>${step.body}</p><p><em>Invio in corso…</em></p>`;
+        return;
+      }
+
+      if (renderedItineraryStepId === step.id) return; // form già disegnato per questa tappa, non ridisegnare ad ogni poll
+      renderedItineraryStepId = step.id;
+
+      const hintBtn = step.hasHint
+        ? `<button type="button" id="hintBtn" class="secondary" style="width:auto">💡 Suggerimento (-punti)</button><p id="hintText"></p>`
+        : "";
+
+      if (step.view.type === "textMatch") {
+        el.innerHTML = `
+          <p><small>${progress}</small></p>
+          <h3>${step.title}</h3>
+          <p>${step.body}</p>
+          <input id="answerInput" placeholder="La tua risposta" autocomplete="off" />
+          <button id="answerSubmitBtn">Invia risposta</button>
+          ${hintBtn}
+          <p id="submitErr" style="color:#b91c1c"></p>`;
+        document.getElementById("answerSubmitBtn").addEventListener("click", () => {
+          const answer = document.getElementById("answerInput").value.trim();
+          if (!answer) return;
+          submitItinerary(step.id, { answer });
+        });
+      } else if (step.view.type === "photoApproval") {
+        el.innerHTML = `
+          <p><small>${progress}</small></p>
+          <h3>${step.title}</h3>
+          <p>${step.body}</p>
+          <input id="photoInput" type="file" accept="image/*" capture="environment" />
+          <button id="photoSubmitBtn">Invia foto</button>
+          <p id="submitErr" style="color:#b91c1c"></p>`;
+        document.getElementById("photoSubmitBtn").addEventListener("click", submitPhoto);
+      } else if (step.view.type === "finale") {
+        el.innerHTML = `
+          <p><small>${progress}</small></p>
+          <h3>${step.title}</h3>
+          <p>${step.body}</p>
+          ${lastVoucherToken ? `<p>Buono ottenuto: <code>${lastVoucherToken}</code></p>` : ""}
+          <button id="finaleBtn">Conferma arrivo</button>
+          <p id="submitErr" style="color:#b91c1c"></p>`;
+        document.getElementById("finaleBtn").addEventListener("click", () => submitItinerary(step.id, {}));
+      } else {
+        el.innerHTML = `<p><small>${progress}</small></p><h3>${step.title}</h3><p>${step.body}</p><p>Tipo di tappa non supportato da questa interfaccia.</p>`;
+      }
+
+      if (step.hasHint) {
+        document.getElementById("hintBtn").addEventListener("click", requestHint);
+      }
+    }
+
+    async function submitItinerary(stepId, payload) {
+      try {
+        const result = await api("/api/team/itinerary/submit", {
+          method: "POST",
+          body: JSON.stringify({ stepId, payload, idempotencyKey: crypto.randomUUID() }),
+        });
+        if (result.voucherToken) lastVoucherToken = result.voucherToken;
+        renderedItineraryStepId = null; // forza il ridisegno alla prossima poll (tappa cambiata o esito noto)
+        poll();
+      } catch (e) {
+        const err = document.getElementById("submitErr");
+        if (err) err.textContent = e.message;
+      }
+    }
+
+    async function submitPhoto() {
+      const input = document.getElementById("photoInput");
+      const file = input.files && input.files[0];
+      if (!file) {
+        document.getElementById("submitErr").textContent = "Seleziona o scatta una foto.";
+        return;
+      }
+      const reader = new FileReader();
+      reader.onload = () => {
+        const stepId = renderedItineraryStepId;
+        submitItinerary(stepId, { photoBase64: reader.result });
+      };
+      reader.readAsDataURL(file);
+    }
+
+    async function requestHint() {
+      try {
+        const hint = await api("/api/team/itinerary/hint", { method: "POST", body: JSON.stringify({}) });
+        document.getElementById("hintText").textContent = hint.text;
+      } catch (e) {
+        alert(e.message);
+      }
+    }
+
+    // Registro dei renderer per tipo di attività (v5.1, preparazione
+    // minima): oggi c'è solo "classification" e il comportamento non
+    // cambia, ma un secondo modulo aggiunge una entry qui invece di un
+    // altro `if (state.activity.type === ...)`.
+    const activityRenderers = {
+      classification: renderClassification,
+    };
+
+    function renderClassification(el, activity, activityId) {
+      el.innerHTML =
+        "<h3>Classificate i collaboratori</h3>" +
+        activity.items
+          .map(
+            (item) => `
+        <div class="item">
+          <div>${item.label}</div>
+          <select data-item="${item.id}">
+            <option value="">-- categoria --</option>
+            ${activity.categories.map((c) => `<option value="${c}">${c}</option>`).join("")}
+          </select>
+        </div>`
+          )
+          .join("") +
+        `<button id="submitBtn">Invia</button><p id="submitErr" style="color:#b91c1c"></p>`;
+
+      document.getElementById("submitBtn").addEventListener("click", () => submitClassification(activityId));
+    }
+
+    async function submitClassification(activityId) {
+      const assignments = {};
+      let complete = true;
+      document.querySelectorAll("[data-item]").forEach((sel) => {
+        if (!sel.value) complete = false;
+        assignments[sel.dataset.item] = sel.value;
+      });
+      if (!complete) {
+        document.getElementById("submitErr").textContent = "Assegna una categoria a tutti gli elementi.";
+        return;
+      }
+      try {
+        await api("/api/team/submissions", {
+          method: "POST",
+          body: JSON.stringify({
+            activityId,
+            idempotencyKey: crypto.randomUUID(),
+            payload: { assignments },
+          }),
+        });
+        poll();
+      } catch (e) {
+        document.getElementById("submitErr").textContent = e.message;
+      }
+    }
+
+    document.getElementById("loginBtn").addEventListener("click", login);
+    document.getElementById("code").addEventListener("keydown", (e) => {
+      if (e.key === "Enter") login();
+    });
+
+    if (token) showGame();
+  </script>
+</body>
+</html>
