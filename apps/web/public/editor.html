@@ -51,9 +51,15 @@
     .tappa-row .coord-badge { flex-shrink: 0; font-size: 0.95rem; width: 1.3rem; text-align: center; }
     .tappa-row button { padding: 0.35rem 0.5rem; margin: 0; width: auto; flex-shrink: 0; }
     .tappa-detail { border: 1px solid #ddd; border-top: none; border-radius: 0 0 6px 6px; padding: 0.75rem; margin: -0.3rem 0 0.4rem; background: #fff; }
-    .tappa-detail .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(9rem, 1fr)); gap: 0.5rem; }
-    .tappa-detail .grid label { margin-top: 0; }
-    .tappa-detail .grid input, .tappa-detail .grid select { width: 100%; box-sizing: border-box; }
+    /* Campi corti (Punti, Blocco, Gruppi, Lat/Lng, i campi specifici del
+       tipo) larghi quanto la loro etichetta, non quanto una colonna di
+       griglia intera — lasciano spazio a Testo/Indizio sulle stesse righe. */
+    .tappa-detail .field-row { display: flex; gap: 0.6rem; flex-wrap: wrap; align-items: flex-end; margin-bottom: 0.4rem; }
+    .tappa-detail .field-row label { margin-top: 0; white-space: nowrap; font-size: 0.8rem; }
+    .tappa-detail .field-narrow { flex: 0 0 auto; }
+    .tappa-detail .field-narrow input, .tappa-detail .field-narrow select { width: 5rem; box-sizing: border-box; margin: 0; }
+    .tappa-detail .field-grow { flex: 1 1 auto; min-width: 8rem; }
+    .tappa-detail .field-grow input, .tappa-detail .field-grow select { width: 100%; box-sizing: border-box; margin: 0; }
   </style>
 </head>
 <body>
@@ -278,19 +284,25 @@
     function configFieldsFor(type, tappa, idx) {
       if (type === "textMatch") {
         return `
-          <label>Risposta attesa</label>
-          <input data-field="config.expectedAnswer" data-idx="${idx}" value="${tappa.config.expectedAnswer ?? ""}" />
-          <label>Tipo risposta</label>
-          <select data-field="config.kind" data-idx="${idx}">
-            ${["testo", "guida", "qr"]
-              .map((k) => `<option value="${k}" ${tappa.config.kind === k ? "selected" : ""}>${k}</option>`)
-              .join("")}
-          </select>`;
+          <div class="field-narrow" style="flex-basis:9rem">
+            <label>Risposta attesa</label>
+            <input data-field="config.expectedAnswer" data-idx="${idx}" value="${tappa.config.expectedAnswer ?? ""}" style="width:9rem" />
+          </div>
+          <div class="field-narrow">
+            <label>Tipo risposta</label>
+            <select data-field="config.kind" data-idx="${idx}">
+              ${["testo", "guida", "qr"]
+                .map((k) => `<option value="${k}" ${tappa.config.kind === k ? "selected" : ""}>${k}</option>`)
+                .join("")}
+            </select>
+          </div>`;
       }
       if (type === "geoAnswer") {
         return `
-          <label>Tolleranza (metri)</label>
-          <input type="number" data-field="config.toleranceMeters" data-idx="${idx}" value="${tappa.config.toleranceMeters ?? 40}" />`;
+          <div class="field-narrow">
+            <label>Tolleranza (m)</label>
+            <input type="number" data-field="config.toleranceMeters" data-idx="${idx}" value="${tappa.config.toleranceMeters ?? 40}" />
+          </div>`;
       }
       return "";
     }
@@ -313,10 +325,10 @@
           </select>
           <input class="tappa-title-inline" placeholder="Titolo tappa" value="${t.title ?? ""}" data-field="title" data-idx="${idx}" />
           <span class="coord-badge" title="${hasCoords ? "coordinate impostate" : "coordinate mancanti"}">${hasCoords ? "📍" : "⚠️"}</span>
+          <button type="button" class="secondary" data-toggle="${idx}" title="${expanded ? "Chiudi dettagli" : "Apri dettagli"}">${expanded ? "▲" : "▼"}</button>
           <button type="button" class="secondary pick-btn ${picking ? "active" : ""}" data-pick="${idx}" title="${picking ? "Clicca un punto sulla mappa" : "Imposta su mappa"}">
             ${picking ? "📍…" : "📍"}
           </button>
-          <button type="button" class="secondary" data-toggle="${idx}" title="${expanded ? "Chiudi dettagli" : "Apri dettagli"}">${expanded ? "▲" : "▼"}</button>
           <button type="button" class="secondary" data-dup="${idx}" title="Duplica">⧉</button>
           <button type="button" class="danger" data-remove="${idx}" title="Rimuovi">✕</button>
         </div>`;
@@ -324,18 +336,21 @@
           const detail = expanded
             ? `
         <div class="tappa-detail">
-          <div class="grid">
-            <div><label>Punti</label><input type="number" value="${t.points ?? 0}" data-field="points" data-idx="${idx}" /></div>
-            <div><label>Blocco (opz.)</label><input value="${t.block ?? ""}" data-field="block" data-idx="${idx}" /></div>
-            <div><label>Gruppi (opz., numeri squadra separati da virgola)</label><input value="${(t.groups ?? []).join(",")}" data-field="groups" data-idx="${idx}" /></div>
-            <div><label>Latitudine</label><input type="number" step="any" value="${t.config.lat ?? ""}" data-field="config.lat" data-idx="${idx}" /></div>
-            <div><label>Longitudine</label><input type="number" step="any" value="${t.config.lng ?? ""}" data-field="config.lng" data-idx="${idx}" /></div>
-            <div>${configFieldsFor(t.type, t, idx)}</div>
+          <div class="field-row">
+            <div class="field-narrow"><label>Punti</label><input type="number" value="${t.points ?? 0}" data-field="points" data-idx="${idx}" /></div>
+            <div class="field-narrow"><label>Blocco</label><input value="${t.block ?? ""}" data-field="block" data-idx="${idx}" /></div>
+            <div class="field-narrow"><label>Gruppi</label><input value="${(t.groups ?? []).join(",")}" data-field="groups" data-idx="${idx}" title="Numeri squadra separati da virgola" /></div>
+          </div>
+          <div class="field-row">
+            <div class="field-narrow"><label>Latitudine</label><input type="number" step="any" value="${t.config.lat ?? ""}" data-field="config.lat" data-idx="${idx}" /></div>
+            <div class="field-narrow"><label>Longitudine</label><input type="number" step="any" value="${t.config.lng ?? ""}" data-field="config.lng" data-idx="${idx}" /></div>
+          </div>
+          <div class="field-row">
+            ${configFieldsFor(t.type, t, idx)}
+            <div class="field-grow"><label>Indizio (opz.)</label><input value="${t.hint ?? ""}" data-field="hint" data-idx="${idx}" /></div>
           </div>
           <label>Testo</label>
-          <textarea rows="2" data-field="body" data-idx="${idx}">${t.body ?? ""}</textarea>
-          <label>Indizio (opz.)</label>
-          <input style="width:100%; box-sizing:border-box" value="${t.hint ?? ""}" data-field="hint" data-idx="${idx}" />
+          <textarea rows="5" data-field="body" data-idx="${idx}">${t.body ?? ""}</textarea>
         </div>`
             : "";
 
