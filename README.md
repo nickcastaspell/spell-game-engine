@@ -49,6 +49,29 @@ di rete**, SQLite può dare `disk I/O error` per via del locking dei file.
 In quel caso punta `DATABASE_URL` fuori dalla cartella sincronizzata,
 es. `DATABASE_URL="file:/tmp/spell-dev.db"`.
 
+## Deploy su Railway: serve un Volume
+
+Il filesystem di un servizio Railway è **effimero**: ad ogni nuovo deploy
+riparte da zero, e sia il file SQLite (`DATABASE_URL`, tutte le sessioni,
+i giochi pubblicati, le bozze dell'editor) sia le foto caricate
+(`UPLOADS_DIR`) vivono per default su disco locale dentro quel
+filesystem — **senza un Volume persistente, ogni deploy cancella tutto**
+(bozze, giochi pubblicati, foto delle squadre), non solo i dati del
+deploy precedente ma anche quelli creati nel frattempo dalla regia.
+
+Setup (una tantum, dashboard Railway del servizio):
+
+1. **Settings → Volumes → New Volume**, mount path a piacere (es. `/data`).
+2. **Settings → Variables**, aggiungi:
+   - `DATABASE_URL=file:/data/dev.db`
+   - `UPLOADS_DIR=/data/uploads`
+
+Entrambe le variabili sono già lette dal codice (`apps/server/src/lib/db.ts`,
+`apps/server/src/lib/uploads.ts`) — nessuna modifica al codice necessaria,
+solo la configurazione su Railway. Dopo aver impostato le variabili,
+riavvia il deploy: da quel momento i dati sopravvivono ai deploy
+successivi, finché il Volume non viene esplicitamente eliminato.
+
 ## Avvio rapido
 
 ```bash

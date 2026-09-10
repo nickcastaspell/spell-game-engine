@@ -37,6 +37,7 @@ import {
   listAcceptedSubmissions,
   listActiveDeviceSessionsForTeams,
   listFacilitators,
+  listGames,
   listPendingPhotos,
   listPhotosForSession,
   listSubmissionsForTeam,
@@ -66,6 +67,15 @@ export function toSessionView(session: SessionRow) {
     updatedAt: session.updated_at,
   };
 }
+
+// GET /api/control/games — elenco dei giochi pubblicati, per il selettore
+// "1. Crea sessione" (prima bisognava sapere a memoria lo slug esatto).
+controlRouter.get(
+  "/games",
+  asyncRoute(async (_req, res) => {
+    sendOk(res, listGames().map((g) => ({ slug: g.slug, name: g.name })));
+  })
+);
 
 // POST /api/control/sessions — crea una sessione (spec §12, §19.2)
 controlRouter.post(

@@ -216,4 +216,16 @@ describe("editor città/tappe (Fase 3): bozze e pubblicazione", () => {
     const afterDelete = await get(`/api/control/game-drafts/${draftId}`);
     expect(afterDelete.status).toBe(404);
   });
+
+  it("GET /api/control/games elenca i giochi pubblicati (per il selettore 'Crea sessione' in regia)", async () => {
+    const created = await post("/api/control/game-drafts", { slug: "citta-elencata", name: "Città elencata" });
+    const definition = created.json.data.definition;
+    definition.content.tappe.push({ id: "t1", number: 1, type: "finale", title: "Fine", body: "", config: {}, points: 0 });
+    await put(`/api/control/game-drafts/${created.json.data.id}`, { definition });
+    await post(`/api/control/game-drafts/${created.json.data.id}/publish`, {});
+
+    const res = await get("/api/control/games");
+    expect(res.status).toBe(200);
+    expect(res.json.data).toContainEqual({ slug: "citta-elencata", name: "Città elencata" });
+  });
 });

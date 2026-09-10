@@ -100,6 +100,29 @@
       return body.data;
     }
 
+    // Feedback visivo su un bottone mentre la sua azione è in corso —
+    // stesso helper di control.html, vedi lì per il commento completo.
+    async function withFeedback(button, fn) {
+      if (!button || button.disabled) return;
+      const original = button.innerHTML;
+      button.disabled = true;
+      button.innerHTML = "⏳…";
+      try {
+        await fn();
+      } finally {
+        button.innerHTML = original;
+        button.disabled = false;
+      }
+    }
+
+    // Token regia persistito in localStorage (stessa cosa in control.html):
+    // ripristinato prima di qualunque chiamata, salvato quando cambia.
+    const savedToken = localStorage.getItem("spell_control_token");
+    if (savedToken) document.getElementById("token").value = savedToken;
+    document.getElementById("token").addEventListener("input", () => {
+      localStorage.setItem("spell_control_token", token());
+    });
+
     let currentDraft = null; // { id, slug, name, definition } della bozza aperta
     let pickingForIdx = null; // indice della tappa in attesa di un click sulla mappa
     let map = null;
@@ -124,7 +147,7 @@
           )
           .join("");
         box.querySelectorAll("[data-open-draft]").forEach((b) => {
-          b.addEventListener("click", () => openDraft(b.dataset.openDraft));
+          b.addEventListener("click", () => withFeedback(b, () => openDraft(b.dataset.openDraft)));
         });
       } catch (e) {
         box.innerHTML = `<p id="err">${e.message}</p>`;
@@ -409,12 +432,12 @@
       }
     }
 
-    document.getElementById("createDraftBtn").addEventListener("click", createDraft);
+    document.getElementById("createDraftBtn").addEventListener("click", (e) => withFeedback(e.currentTarget, createDraft));
     document.getElementById("addTappaBtn").addEventListener("click", addTappa);
-    document.getElementById("saveDraftBtn").addEventListener("click", saveDraft);
-    document.getElementById("publishDraftBtn").addEventListener("click", publishDraft);
-    document.getElementById("deleteDraftBtn").addEventListener("click", deleteDraft);
-    document.getElementById("reloadDraftsBtn").addEventListener("click", loadDrafts);
+    document.getElementById("saveDraftBtn").addEventListener("click", (e) => withFeedback(e.currentTarget, saveDraft));
+    document.getElementById("publishDraftBtn").addEventListener("click", (e) => withFeedback(e.currentTarget, publishDraft));
+    document.getElementById("deleteDraftBtn").addEventListener("click", (e) => withFeedback(e.currentTarget, deleteDraft));
+    document.getElementById("reloadDraftsBtn").addEventListener("click", (e) => withFeedback(e.currentTarget, loadDrafts));
     // Il primo caricamento (sotto) parte prima che l'utente abbia potuto
     // scrivere il token: se poi lo inserisce/corregge, ricarica da sola
     // appena esce dal campo, senza dover premere "Aggiorna" a mano.

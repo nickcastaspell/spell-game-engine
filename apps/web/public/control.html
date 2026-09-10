@@ -53,8 +53,11 @@
 
   <fieldset id="createFieldset">
     <legend>1. Crea sessione</legend>
-    <label>gameSlug</label>
-    <input id="gameSlug" value="less-is-more" />
+    <label>Gioco</label>
+    <div class="row">
+      <select id="gameSlug" style="min-width:16rem"><option value="">Caricamento…</option></select>
+      <button id="reloadGamesBtn" type="button" class="secondary" style="width:auto">🔄</button>
+    </div>
     <label>Nome sessione</label>
     <input id="sessionName" value="Sessione aula" />
     <button id="createBtn">Crea sessione</button>
@@ -171,6 +174,53 @@
       return body.data;
     }
 
+    // Feedback visivo su un bottone mentre la sua azione (di solito una
+    // chiamata api()) è in corso: disabilitato + testo "⏳…", ripristinato
+    // alla fine (successo o errore) — l'errore stesso resta gestito da chi
+    // chiama (try/catch + alert()/messaggio a schermo, invariato), qui ci
+    // si limita a mostrare che "sta succedendo qualcosa" e a evitare doppi
+    // click mentre la richiesta è in volo.
+    async function withFeedback(button, fn) {
+      if (!button || button.disabled) return;
+      const original = button.innerHTML;
+      button.disabled = true;
+      button.innerHTML = "⏳…";
+      try {
+        await fn();
+      } finally {
+        button.innerHTML = original;
+        button.disabled = false;
+      }
+    }
+
+    // Il token regia resta in localStorage (comodità locale, stesso spirito
+    // del default "nick" in dev — vedi controlAuth.ts): senza, bisognerebbe
+    // riscriverlo ad ogni apertura pagina. Ripristinato PRIMA di qualunque
+    // chiamata che lo usa; salvato e ri-applicato quando cambia.
+    const savedToken = localStorage.getItem("spell_control_token");
+    if (savedToken) document.getElementById("token").value = savedToken;
+    document.getElementById("token").addEventListener("blur", () => {
+      localStorage.setItem("spell_control_token", token());
+      detectDevMode();
+      loadGames();
+    });
+
+    // Elenco dei giochi pubblicati (prima bisognava scrivere lo slug a
+    // memoria in un campo di testo) per "1. Crea sessione".
+    async function loadGames() {
+      const select = document.getElementById("gameSlug");
+      const previous = select.value;
+      try {
+        const games = await api("/api/control/games");
+        select.innerHTML = games.length
+          ? games.map((g) => `<option value="${g.slug}">${g.name} (${g.slug})</option>`).join("")
+          : `<option value="">Nessun gioco pubblicato — usa l'Editor caccia</option>`;
+        if (games.some((g) => g.slug === previous)) select.value = previous;
+      } catch (e) {
+        select.innerHTML = `<option value="">${e.message}</option>`;
+      }
+    }
+
     // Rileva se gli strumenti dev sono disponibili SUL BACKEND (non solo
     // nella UI): se /api/dev/* non è montato (produzione) risponde 404 anche
     // senza token valido; se è montato risponde 401 finché non si autentica.
@@ -210,11 +260,11 @@
               <span>${s.status}</span>
               <span><small>${s.createdAt}</small></span>
               <span>${s.teamCount} tavoli</span>
-              <button onclick="openSessionInDashboard('${s.id}')">Apri</button>
-              <button class="secondary" onclick="duplicateSessionArchive('${s.id}')">Duplica</button>
-              <button class="secondary" onclick="archiveSessionArchive('${s.id}')" ${canArchive ? "" : 'disabled title="solo da COMPLETED"'}>Archivia</button>
-              ${canReopen ? `<button class="secondary" onclick="reopenSessionArchive('${s.id}')">Riapri</button>` : ""}
-              <button class="danger" onclick="deleteSessionArchive('${s.id}')">Elimina (DEV)</button>
+              <button onclick="withFeedback(this, () => openSessionInDashboard('${s.id}'))">Apri</button>
+              <button class="secondary" onclick="withFeedback(this, () => duplicateSessionArchive('${s.id}'))">Duplica</button>
+              <button class="secondary" onclick="withFeedback(this, () => archiveSessionArchive('${s.id}'))" ${canArchive ? "" : 'disabled title="solo da COMPLETED"'}>Archivia</button>
+              ${canReopen ? `<button class="secondary" onclick="withFeedback(this, () => reopenSessionArchive('${s.id}'))">Riapri</button>` : ""}
+              <button class="danger" onclick="withFeedback(this, () => deleteSessionArchive('${s.id}'))">Elimina (DEV)</button>
             </div>`;
           })
           .join("");
@@ -337,7 +387,7 @@
         .map((s) => `<button data-status="${s}" ${s === current ? "disabled" : ""}>${s}</button>`)
         .join("");
       box.querySelectorAll("button").forEach((b) =>
-        b.addEventListener("click", () => changeStatus(b.dataset.status))
+        b.addEventListener("click", () => withFeedback(b, () => changeStatus(b.dataset.status)))
       );
     }
 
@@ -421,10 +471,9 @@
         })
         .join("");
       box.querySelectorAll("button").forEach((b) => {
-        b.addEventListener("click", () => {
-          if (b.dataset.op === "open") openPhase(b.dataset.phase);
-          else closePhase(b.dataset.phase);
-        });
+        b.addEventListener("click", () =>
+          withFeedback(b, () => (b.dataset.op === "open" ? openPhase(b.dataset.phase) : closePhase(b.dataset.phase)))
+        );
       });
     }
 
@@ -529,7 +578,7 @@
         .join("");
 
       box.querySelectorAll("[data-edit-route]").forEach((b) => {
-        b.addEventListener("click", () => startEditRoute(b.dataset.editRoute));
+        b.addEventListener("click", () => withFeedback(b, () => startEditRoute(b.dataset.editRoute)));
       });
     }
 
@@ -590,7 +639,7 @@
           renderRouteEditor();
         });
       });
-      document.getElementById("saveRouteBtn").addEventListener("click", saveRouteEdit);
+      document.getElementById("saveRouteBtn").addEventListener("click", (e) => withFeedback(e.currentTarget, saveRouteEdit));
       document.getElementById("cancelRouteBtn").addEventListener("click", () => {
         editingRoute = null;
         loadTeamRoutes();
@@ -734,8 +783,8 @@
                  style="width:5rem; height:5rem; object-fit:cover; border-radius:6px; border:1px solid #ddd"
                  onerror="this.style.display='none'" />
             <span><strong>${p.teamName}</strong> — tappa ${p.stepId} (tentativo ${p.attempt})</span>
-            <button onclick="decidePhoto('${p.id}', 'approved')">✅ Approva</button>
-            <button class="danger" onclick="decidePhoto('${p.id}', 'rejected')">❌ Rigetta</button>
+            <button onclick="withFeedback(this, () => decidePhoto('${p.id}', 'approved'))">✅ Approva</button>
+            <button class="danger" onclick="withFeedback(this, () => decidePhoto('${p.id}', 'rejected'))">❌ Rigetta</button>
           </div>`
           )
           .join("");
@@ -775,7 +824,7 @@
             <td><span class="dot ${t.connected ? "on" : "off"}"></span></td>
             <td>${t.submitted ? "✅" : "—"}</td>
             <td>${t.score}</td>
-            <td>${t.submitted ? `<button class="secondary" onclick="reopenTeam('${t.teamId}', '${d.currentPhaseId}')">Riapri</button>` : ""}</td>
+            <td>${t.submitted ? `<button class="secondary" onclick="withFeedback(this, () => reopenTeam('${t.teamId}', '${d.currentPhaseId}'))">Riapri</button>` : ""}</td>
           </tr>`
           )
           .join("");
@@ -784,15 +833,17 @@
       }
     }
 
-    document.getElementById("generateRoutesBtn").addEventListener("click", generateRoutes);
-    document.getElementById("createFacilitatorBtn").addEventListener("click", createFacilitator);
-    document.getElementById("createBtn").addEventListener("click", createSession);
-    document.getElementById("genTeamsBtn").addEventListener("click", genTeams);
-    document.getElementById("reloadSessionsBtn").addEventListener("click", loadSessionsArchive);
-    document.getElementById("resetSessionBtn").addEventListener("click", resetSession);
-    document.getElementById("newGameBtn").addEventListener("click", newGame);
+    document.getElementById("generateRoutesBtn").addEventListener("click", (e) => withFeedback(e.currentTarget, generateRoutes));
+    document.getElementById("createFacilitatorBtn").addEventListener("click", (e) => withFeedback(e.currentTarget, createFacilitator));
+    document.getElementById("createBtn").addEventListener("click", (e) => withFeedback(e.currentTarget, createSession));
+    document.getElementById("genTeamsBtn").addEventListener("click", (e) => withFeedback(e.currentTarget, genTeams));
+    document.getElementById("reloadSessionsBtn").addEventListener("click", (e) => withFeedback(e.currentTarget, loadSessionsArchive));
+    document.getElementById("resetSessionBtn").addEventListener("click", (e) => withFeedback(e.currentTarget, resetSession));
+    document.getElementById("newGameBtn").addEventListener("click", (e) => withFeedback(e.currentTarget, newGame));
+    document.getElementById("reloadGamesBtn").addEventListener("click", (e) => withFeedback(e.currentTarget, loadGames));
 
     detectDevMode();
+    loadGames();
   </script>
 </body>
 </html>

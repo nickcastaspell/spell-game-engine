@@ -89,6 +89,11 @@ export interface EffectEventRow {
 
 // --- game / game_version ---
 
+/** Elenco dei giochi pubblicati (almeno una game_version), per il selettore "1. Crea sessione" in control.html. */
+export function listGames(): GameRow[] {
+  return db.prepare("SELECT * FROM game ORDER BY name ASC").all() as unknown as GameRow[];
+}
+
 export function upsertGame(slug: string, name: string): GameRow {
   const existing = db.prepare("SELECT * FROM game WHERE slug = ?").get(slug) as unknown as GameRow;
   if (existing) {
