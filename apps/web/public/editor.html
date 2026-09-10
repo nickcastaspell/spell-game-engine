@@ -60,6 +60,16 @@
     .tappa-detail .field-narrow input, .tappa-detail .field-narrow select { width: 5rem; box-sizing: border-box; margin: 0; }
     .tappa-detail .field-grow { flex: 1 1 auto; min-width: 8rem; }
     .tappa-detail .field-grow input, .tappa-detail .field-grow select { width: 100%; box-sizing: border-box; margin: 0; }
+    /* Stessa larghezza totale di prima: solo riorganizzata in due colonne
+       (campi corti a sinistra, Testo a destra) invece di impilata. */
+    .detail-layout { display: flex; gap: 1rem; align-items: stretch; }
+    .detail-left { flex: 1 1 55%; min-width: 0; }
+    .detail-right { flex: 1 1 45%; min-width: 0; display: flex; flex-direction: column; }
+    .detail-right label { margin-top: 0; }
+    .detail-right textarea { flex: 1 1 auto; min-height: 7rem; resize: vertical; margin: 0; }
+    @media (max-width: 560px) {
+      .detail-layout { flex-direction: column; }
+    }
   </style>
 </head>
 <body>
@@ -110,6 +120,11 @@
         <button id="addTappaBtn" class="secondary">+ Aggiungi tappa</button>
       </div>
       <div class="map-col">
+        <div class="row" style="margin:0 0 0.4rem">
+          <input id="mapSearchInput" placeholder="Cerca un indirizzo…" style="flex:1; margin:0; min-width:0" />
+          <button type="button" id="mapSearchBtn" class="secondary" style="width:auto; margin:0">🔎 Cerca</button>
+        </div>
+        <p id="mapSearchMsg" style="font-size:0.8rem; color:#b91c1c; margin:0 0 0.4rem"></p>
         <div id="map"></div>
         <div class="row" style="margin-top:0.75rem">
           <button id="saveDraftBtn">Salva bozza</button>
@@ -336,21 +351,27 @@
           const detail = expanded
             ? `
         <div class="tappa-detail">
-          <div class="field-row">
-            <div class="field-narrow"><label>Punti</label><input type="number" value="${t.points ?? 0}" data-field="points" data-idx="${idx}" /></div>
-            <div class="field-narrow"><label>Blocco</label><input value="${t.block ?? ""}" data-field="block" data-idx="${idx}" /></div>
-            <div class="field-narrow"><label>Gruppi</label><input value="${(t.groups ?? []).join(",")}" data-field="groups" data-idx="${idx}" title="Numeri squadra separati da virgola" /></div>
+          <div class="detail-layout">
+            <div class="detail-left">
+              <div class="field-row">
+                <div class="field-narrow"><label>Punti</label><input type="number" value="${t.points ?? 0}" data-field="points" data-idx="${idx}" /></div>
+                <div class="field-narrow"><label>Blocco</label><input value="${t.block ?? ""}" data-field="block" data-idx="${idx}" /></div>
+                <div class="field-narrow"><label>Gruppi</label><input value="${(t.groups ?? []).join(",")}" data-field="groups" data-idx="${idx}" title="Numeri squadra separati da virgola" /></div>
+              </div>
+              <div class="field-row">
+                <div class="field-narrow"><label>Latitudine</label><input type="number" step="any" value="${t.config.lat ?? ""}" data-field="config.lat" data-idx="${idx}" /></div>
+                <div class="field-narrow"><label>Longitudine</label><input type="number" step="any" value="${t.config.lng ?? ""}" data-field="config.lng" data-idx="${idx}" /></div>
+              </div>
+              <div class="field-row">
+                ${configFieldsFor(t.type, t, idx)}
+                <div class="field-grow"><label>Indizio (opz.)</label><input value="${t.hint ?? ""}" data-field="hint" data-idx="${idx}" /></div>
+              </div>
+            </div>
+            <div class="detail-right">
+              <label>Testo</label>
+              <textarea data-field="body" data-idx="${idx}">${t.body ?? ""}</textarea>
+            </div>
           </div>
-          <div class="field-row">
-            <div class="field-narrow"><label>Latitudine</label><input type="number" step="any" value="${t.config.lat ?? ""}" data-field="config.lat" data-idx="${idx}" /></div>
-            <div class="field-narrow"><label>Longitudine</label><input type="number" step="any" value="${t.config.lng ?? ""}" data-field="config.lng" data-idx="${idx}" /></div>
-          </div>
-          <div class="field-row">
-            ${configFieldsFor(t.type, t, idx)}
-            <div class="field-grow"><label>Indizio (opz.)</label><input value="${t.hint ?? ""}" data-field="hint" data-idx="${idx}" /></div>
-          </div>
-          <label>Testo</label>
-          <textarea rows="5" data-field="body" data-idx="${idx}">${t.body ?? ""}</textarea>
         </div>`
             : "";
 
@@ -440,6 +461,31 @@
       refreshMapMarkers();
     }
 
+    // Ricerca indirizzo (Nominatim, OpenStreetMap — gratuito, nessuna API
+    // key, stessa filosofia della mappa): centra/zooma la mappa sul primo
+    // risultato, così diventa facile trovare il punto giusto su cui poi
+    // cliccare per pinnarlo — la ricerca stessa non imposta nessuna
+    // coordinata, va sempre confermata con un clic (coerente con "📍
+    // Imposta su mappa": il clic resta l'unico modo di assegnare lat/lng).
+    async function searchAddress() {
+      const input = document.getElementById("mapSearchInput");
+      const msgEl = document.getElementById("mapSearchMsg");
+      const query = input.value.trim();
+      msgEl.textContent = "";
+      if (!query || !map) return;
+      try {
+        const res = await fetch(`https://nominatim.openstreetmap.org/search?format=json&limit=1&q=${encodeURIComponent(query)}`);
+        const results = await res.json();
+        if (results.length === 0) {
+          msgEl.textContent = "Nessun risultato per questo indirizzo.";
+          return;
+        }
+        map.setView([Number(results[0].lat), Number(results[0].lon)], 17);
+      } catch (e) {
+        msgEl.textContent = "Ricerca non riuscita: " + e.message;
+      }
+    }
+
     function refreshMapMarkers() {
       if (!map) return;
       mapMarkers.forEach((m) => map.removeLayer(m));
@@ -519,6 +565,13 @@
     document.getElementById("createDraftBtn").addEventListener("click", (e) => withFeedback(e.currentTarget, createDraft));
     document.getElementById("addTappaBtn").addEventListener("click", addTappa);
     document.getElementById("bumpVersionBtn").addEventListener("click", bumpVersion);
+    document.getElementById("mapSearchBtn").addEventListener("click", (e) => withFeedback(e.currentTarget, searchAddress));
+    document.getElementById("mapSearchInput").addEventListener("keydown", (e) => {
+      if (e.key === "Enter") {
+        e.preventDefault();
+        searchAddress();
+      }
+    });
     document.getElementById("saveDraftBtn").addEventListener("click", (e) => withFeedback(e.currentTarget, saveDraft));
     document.getElementById("publishDraftBtn").addEventListener("click", (e) => withFeedback(e.currentTarget, publishDraft));
     document.getElementById("deleteDraftBtn").addEventListener("click", (e) => withFeedback(e.currentTarget, deleteDraft));
