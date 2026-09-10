@@ -64,8 +64,17 @@
   <fieldset id="draftEditor" style="display:none">
     <legend>Modifica bozza — <span id="editingName"></span></legend>
 
-    <label>Nome città/caccia</label>
-    <input id="draftName" />
+    <div class="row">
+      <div><label>Nome città/caccia</label><input id="draftName" /></div>
+      <div>
+        <label>Versione</label>
+        <div class="row" style="margin:0">
+          <input id="draftVersion" style="width:6rem" />
+          <button type="button" id="bumpVersionBtn" class="secondary" style="width:auto">🔁 Incrementa</button>
+        </div>
+      </div>
+    </div>
+    <p><small class="hint">Una versione già pubblicata è immutabile: per ripubblicare con delle modifiche, cambia prima il numero di versione qui sopra (es. da 0.1 a 0.2) — "🔁 Incrementa" lo fa in automatico.</small></p>
 
     <h4>Tappe</h4>
     <p><small class="hint">Clicca "📍 Imposta su mappa" su una tappa, poi clicca un punto sulla mappa qui sotto per impostarne lat/lng.</small></p>
@@ -194,6 +203,7 @@
       document.getElementById("draftEditor").style.display = "block";
       document.getElementById("editingName").textContent = `${draft.name} (${draft.slug})`;
       document.getElementById("draftName").value = draft.name;
+      document.getElementById("draftVersion").value = draft.definition.schemaVersion;
       document.getElementById("editorErr").textContent = "";
       document.getElementById("editorOk").textContent = "";
       renderTappe();
@@ -385,7 +395,18 @@
 
     function collectDefinition() {
       currentDraft.definition.game.name = document.getElementById("draftName").value.trim();
+      currentDraft.definition.schemaVersion = document.getElementById("draftVersion").value.trim();
       return currentDraft.definition;
+    }
+
+    // Incrementa l'ultima cifra decimale (0.1 -> 0.2, 1.9 -> 2.0); se il
+    // formato non è un numero semplice, lascia il campo a modifica manuale
+    // — è solo una comodità, non l'unico modo per cambiare versione.
+    function bumpVersion() {
+      const input = document.getElementById("draftVersion");
+      const current = Number(input.value);
+      if (Number.isNaN(current)) return;
+      input.value = Math.round((current + 0.1) * 10) / 10;
     }
 
     async function saveDraft() {
@@ -416,7 +437,9 @@
         const res = await api(`/api/control/game-drafts/${currentDraft.id}/publish`, { method: "POST", body: JSON.stringify({}) });
         okEl.textContent = `Pubblicato: ${res.slug}@${res.version}. Ora è selezionabile in Regia come gameSlug "${res.slug}".`;
       } catch (e) {
-        errEl.textContent = e.message;
+        errEl.textContent = e.message.includes("immutabile")
+          ? `${e.message} — usa il campo "Versione" qui sopra (o il bottone "🔁 Incrementa") e pubblica di nuovo.`
+          : e.message;
       }
     }
 
@@ -434,6 +457,7 @@
 
     document.getElementById("createDraftBtn").addEventListener("click", (e) => withFeedback(e.currentTarget, createDraft));
     document.getElementById("addTappaBtn").addEventListener("click", addTappa);
+    document.getElementById("bumpVersionBtn").addEventListener("click", bumpVersion);
     document.getElementById("saveDraftBtn").addEventListener("click", (e) => withFeedback(e.currentTarget, saveDraft));
     document.getElementById("publishDraftBtn").addEventListener("click", (e) => withFeedback(e.currentTarget, publishDraft));
     document.getElementById("deleteDraftBtn").addEventListener("click", (e) => withFeedback(e.currentTarget, deleteDraft));
