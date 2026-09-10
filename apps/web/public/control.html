@@ -73,10 +73,10 @@
     </div>
 
     <fieldset>
-      <legend>2. Tavoli</legend>
+      <legend>2. Squadre</legend>
       <div class="row">
         <input id="teamCount" type="number" value="20" min="1" max="50" style="width:5rem" />
-        <button id="genTeamsBtn">Genera tavoli</button>
+        <button id="genTeamsBtn">Genera squadre</button>
       </div>
     </fieldset>
 
@@ -94,10 +94,10 @@
     </fieldset>
 
     <fieldset>
-      <legend>Dashboard tavoli</legend>
+      <legend>Dashboard squadre</legend>
       <p id="summary"></p>
       <table>
-        <thead><tr><th>Tavolo</th><th>Codice</th><th>Conn.</th><th>Inviato</th><th>Punteggio</th><th>Azione</th></tr></thead>
+        <thead><tr><th>Squadra</th><th>Codice</th><th>Conn.</th><th>Inviato</th><th>Punteggio</th><th>Azione</th></tr></thead>
         <tbody id="teamsBody"></tbody>
       </table>
     </fieldset>
@@ -259,7 +259,7 @@
               <span style="min-width:14rem"><strong>${s.name}</strong> <small>(${s.gameName})</small></span>
               <span>${s.status}</span>
               <span><small>${s.createdAt}</small></span>
-              <span>${s.teamCount} tavoli</span>
+              <span>${s.teamCount} squadre</span>
               <button onclick="withFeedback(this, () => openSessionInDashboard('${s.id}'))">Apri</button>
               <button class="secondary" onclick="withFeedback(this, () => duplicateSessionArchive('${s.id}'))">Duplica</button>
               <button class="secondary" onclick="withFeedback(this, () => archiveSessionArchive('${s.id}'))" ${canArchive ? "" : 'disabled title="solo da COMPLETED"'}>Archivia</button>
@@ -310,7 +310,7 @@
     }
 
     async function deleteSessionArchive(id) {
-      if (!confirm("Eliminare definitivamente questa sessione, i suoi tavoli e tutti gli eventi collegati?")) return;
+      if (!confirm("Eliminare definitivamente questa sessione, le sue squadre e tutti gli eventi collegati?")) return;
       try {
         await api(`/api/dev/sessions/${id}`, { method: "DELETE" });
         if (sid === id) {
@@ -339,7 +339,7 @@
 
     async function resetSession() {
       if (!sid) return;
-      if (!confirm("Azzerare submission, punteggi ed eventi di questa sessione e riportarla a DRAFT? I tavoli restano.")) return;
+      if (!confirm("Azzerare submission, punteggi ed eventi di questa sessione e riportarla a DRAFT? Le squadre restano.")) return;
       try {
         await api(`/api/dev/sessions/${sid}/reset`, { method: "POST" });
         refreshDashboard();
@@ -360,7 +360,7 @@
       }
     }
 
-    // --- Flusso esistente (creazione, tavoli, stato, fasi) ---
+    // --- Flusso esistente (creazione, squadre, stato, fasi) ---
 
     async function createSession() {
       document.getElementById("err").textContent = "";
@@ -814,7 +814,7 @@
         renderPhaseButtons(d);
         renderItineraryPanel(d);
         document.getElementById("summary").textContent =
-          `Invii: ${d.submittedCount}/${d.totalTeams}` + (d.allSubmitted ? " — tutti i tavoli hanno inviato" : "");
+          `Invii: ${d.submittedCount}/${d.totalTeams}` + (d.allSubmitted ? " — tutte le squadre hanno inviato" : "");
         document.getElementById("teamsBody").innerHTML = d.teams
           .map(
             (t) => `

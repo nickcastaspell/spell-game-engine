@@ -1,0 +1,302 @@
+<!doctype html>
+<html lang="it">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Facilitatore — Spell Game Engine</title>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.css" />
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.js"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@300;400;500;600&display=swap" rel="stylesheet" />
+  <style>
+    /* Stessa palette/font del vecchio pannello Admin Apps Script — dark
+       navy/blu, IBM Plex — deliberatamente diverso dal tema carta/oro della
+       squadra (team.html): stessa distinzione dell'originale tra giocatore
+       e operatore. */
+    :root {
+      --bg: #0b0f1a; --bg2: #131929; --bg3: #1c2540;
+      --border: #2d3a58; --border2: #3d4f72;
+      --text: #e8edf8; --sub: #b0bcd6; --muted: #7a8fb5;
+      --accent: #5b9cf6; --green: #3dd68c; --red: #f06565; --amber: #f5b942;
+      --radius: 8px; --mono: 'IBM Plex Mono', monospace; --sans: 'IBM Plex Sans', sans-serif;
+    }
+    * { box-sizing: border-box; }
+    body { margin: 0; background: var(--bg); color: var(--text); font-family: var(--sans); font-size: 14px; line-height: 1.6; }
+    .page { max-width: 760px; margin: 0 auto; padding: 24px 20px 48px; }
+    a { color: var(--accent); }
+    h1 { font-family: var(--mono); font-size: 20px; font-weight: 600; color: var(--accent); margin: 0 0 4px; }
+    .card { background: var(--bg2); border: 1px solid var(--border); border-radius: var(--radius); padding: 18px 20px; margin: 16px 0; }
+    .card-title { font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: .7px; color: var(--sub); font-family: var(--mono); margin-bottom: 12px; }
+    label { display: block; font-size: 11px; text-transform: uppercase; letter-spacing: .6px; color: var(--muted); margin-bottom: 8px; font-family: var(--mono); }
+    input, select { font-family: var(--sans); font-size: 13px; padding: 10px 12px; border-radius: var(--radius); border: 1px solid var(--border2); background: var(--bg3); color: var(--text); }
+    input:focus, select:focus { outline: none; border-color: var(--accent); }
+    input#token { width: 100%; font-family: var(--mono); letter-spacing: 1px; box-sizing: border-box; }
+    #err { color: var(--red); font-size: 13px; margin-top: 8px; }
+    .row { display: flex; gap: 0.5rem; flex-wrap: wrap; align-items: center; }
+    button { font-family: var(--sans); font-size: 12px; font-weight: 500; cursor: pointer; border-radius: var(--radius); border: none; padding: 8px 14px; }
+    button:disabled { opacity: .5; cursor: default; }
+    table { width: 100%; border-collapse: collapse; }
+    th { text-align: left; padding: 8px 10px; font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: .5px; color: var(--muted); border-bottom: 1px solid var(--border); font-family: var(--mono); }
+    td { padding: 10px 10px; font-size: 13px; border-bottom: 1px solid var(--border); }
+    tr:last-child td { border-bottom: none; }
+    .dot { display: inline-block; width: 0.7rem; height: 0.7rem; border-radius: 50%; vertical-align: middle; }
+    .badge { display: inline-flex; align-items: center; font-family: var(--mono); font-size: 10px; font-weight: 600; padding: 3px 9px; border-radius: 20px; text-transform: uppercase; letter-spacing: .4px; }
+    .badge.done { background: rgba(61,214,140,.15); color: var(--green); }
+    .badge.progress { background: rgba(91,156,246,.15); color: var(--accent); }
+    #facMap { height: 640px; border-radius: var(--radius); margin-top: 4px; }
+
+    .foto-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 14px; margin-top: 4px; }
+    .foto-card { background: var(--bg3); border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden; }
+    .foto-card.attesa { border-top: 3px solid var(--amber); }
+    .foto-card.approvato { border-top: 3px solid var(--green); }
+    .foto-card.rigettato { border-top: 3px solid var(--red); }
+    .foto-thumb { width: 100%; height: 130px; object-fit: cover; display: block; background: var(--bg); }
+    .foto-meta { padding: 10px 12px; }
+    .foto-squad { font-weight: 600; font-size: 13px; color: var(--text); margin-bottom: 2px; }
+    .foto-detail { font-size: 11px; color: var(--muted); font-family: var(--mono); }
+    .foto-actions { padding: 10px 12px; display: flex; gap: 8px; }
+    .btn-green { flex: 1; background: rgba(61,214,140,.2); color: var(--green); border: 1px solid rgba(61,214,140,.35); }
+    .btn-red { flex: 1; background: rgba(240,101,101,.2); color: var(--red); border: 1px solid rgba(240,101,101,.35); }
+    .empty { text-align: center; padding: 30px 10px; color: var(--muted); font-size: 13px; }
+  </style>
+</head>
+<body>
+  <div class="page">
+    <h1>Facilitatore</h1>
+    <p><a href="/index.html">← Torna alla home</a></p>
+
+    <div class="card">
+      <div class="card-title">Connessione</div>
+      <label>Token facilitatore</label>
+      <input id="token" placeholder="es. FAC-XXXXXXXXXX" />
+      <p id="err"></p>
+    </div>
+
+    <div class="card">
+      <div class="card-title">Le mie squadre</div>
+      <table>
+        <thead><tr><th></th><th>Squadra</th><th>Tappa</th><th>Punteggio</th><th>Stato</th></tr></thead>
+        <tbody id="teamsBody"><tr><td colspan="5" class="empty">Inserisci il token per caricare.</td></tr></tbody>
+      </table>
+    </div>
+
+    <div class="card">
+      <div class="card-title">Mappa squadre</div>
+      <div id="facMap"></div>
+    </div>
+
+    <div class="card">
+      <div class="card-title">Foto in attesa di approvazione</div>
+      <div id="pendingPhotos"><p class="empty">Nessuna foto in attesa.</p></div>
+    </div>
+
+    <div class="card">
+      <div class="card-title">Galleria foto</div>
+      <div class="row">
+        <label style="margin:0">Filtra per stato</label>
+        <select id="galleryStatusFilter">
+          <option value="">Tutte</option>
+          <option value="pending">In attesa</option>
+          <option value="approved">Approvate</option>
+          <option value="rejected">Rigettate</option>
+        </select>
+      </div>
+      <div id="photoGallery"><p class="empty">Nessuna foto.</p></div>
+    </div>
+  </div>
+
+  <script>
+    // Colori distinti per squadra (tabella + pin sulla mappa), ciclici se
+    // ci sono più squadre che colori — l'ordine è quello restituito da
+    // /api/facilitator/overview, stabile tra un poll e l'altro perché il
+    // backend ordina per team.created_at.
+    const TEAM_COLORS = ["#5b9cf6", "#3dd68c", "#f5b942", "#f06565", "#a78bfa", "#22d3ee", "#f472b6", "#84cc16", "#fb923c", "#818cf8"];
+    function colorForIndex(i) {
+      return TEAM_COLORS[i % TEAM_COLORS.length];
+    }
+
+    function token() {
+      return document.getElementById("token").value.trim();
+    }
+
+    async function api(path, opts = {}) {
+      const res = await fetch(path, {
+        ...opts,
+        headers: { "Content-Type": "application/json", Authorization: "Bearer " + token(), ...(opts.headers || {}) },
+      });
+      const body = await res.json();
+      if (!res.ok || !body.ok) throw new Error(body.error?.message || "Errore");
+      return body.data;
+    }
+
+    // Stesso helper di control.html/editor.html: feedback visivo "⏳…" +
+    // disabilitato mentre l'azione del bottone è in corso.
+    async function withFeedback(button, fn) {
+      if (!button || button.disabled) return;
+      const original = button.innerHTML;
+      button.disabled = true;
+      button.innerHTML = "⏳…";
+      try {
+        await fn();
+      } finally {
+        button.innerHTML = original;
+        button.disabled = false;
+      }
+    }
+
+    const savedToken = localStorage.getItem("spell_facilitator_token");
+    if (savedToken) document.getElementById("token").value = savedToken;
+    document.getElementById("token").addEventListener("blur", () => {
+      localStorage.setItem("spell_facilitator_token", token());
+      refreshAll();
+    });
+
+    let pollTimer = null;
+    let facMap = null;
+    let facMarkersLayer = null;
+
+    function startPolling() {
+      if (pollTimer) clearInterval(pollTimer);
+      pollTimer = setInterval(refreshAll, 4000);
+      refreshAll();
+    }
+
+    async function refreshAll() {
+      if (!token()) return;
+      document.getElementById("err").textContent = "";
+      try {
+        const overview = await api("/api/facilitator/overview");
+        renderTeamsTable(overview);
+        renderMap(overview);
+      } catch (e) {
+        document.getElementById("err").textContent = e.message;
+        return;
+      }
+      loadPendingPhotos();
+      loadGallery();
+    }
+
+    function renderTeamsTable(overview) {
+      const body = document.getElementById("teamsBody");
+      if (overview.length === 0) {
+        body.innerHTML = `<tr><td colspan="5" class="empty">Nessuna squadra assegnata.</td></tr>`;
+        return;
+      }
+      body.innerHTML = overview
+        .map((entry, i) => {
+          const statusBadge = entry.completed
+            ? `<span class="badge done">Completato</span>`
+            : `<span class="badge progress">In corso</span>`;
+          return `
+        <tr>
+          <td><span class="dot" style="background:${colorForIndex(i)}"></span></td>
+          <td>${entry.teamName}</td>
+          <td>${entry.position} / ${entry.totalSteps}</td>
+          <td>${entry.score ?? 0}</td>
+          <td>${statusBadge}</td>
+        </tr>`;
+        })
+        .join("");
+    }
+
+    function renderMap(overview) {
+      if (!facMap) {
+        facMap = L.map("facMap").setView([44.4949, 11.3426], 15);
+        L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", { attribution: "© OpenStreetMap" }).addTo(facMap);
+      }
+      if (facMarkersLayer) facMap.removeLayer(facMarkersLayer);
+      facMarkersLayer = L.layerGroup();
+
+      const withCoords = [];
+      overview.forEach((entry, i) => {
+        if (!entry.currentStep || entry.currentStep.lat === null || entry.currentStep.lng === null) return;
+        const color = colorForIndex(i);
+        const marker = L.circleMarker([entry.currentStep.lat, entry.currentStep.lng], {
+          radius: 9,
+          color,
+          fillColor: color,
+          fillOpacity: 0.9,
+          weight: 2,
+        });
+        marker.bindTooltip(entry.teamName, { permanent: true, direction: "top", className: "team-label" });
+        marker.addTo(facMarkersLayer);
+        withCoords.push([entry.currentStep.lat, entry.currentStep.lng]);
+      });
+      facMarkersLayer.addTo(facMap);
+      if (withCoords.length > 0) facMap.fitBounds(withCoords, { padding: [40, 40], maxZoom: 17 });
+    }
+
+    async function loadPendingPhotos() {
+      const box = document.getElementById("pendingPhotos");
+      try {
+        const photos = await api("/api/facilitator/photos/pending");
+        if (photos.length === 0) {
+          box.innerHTML = '<p class="empty">Nessuna foto in attesa.</p>';
+          return;
+        }
+        box.innerHTML = `<div class="foto-grid">${photos
+          .map(
+            (p) => `
+          <div class="foto-card attesa">
+            <img class="foto-thumb" src="/api/facilitator/photos/${p.id}/image" alt="foto" onerror="this.style.display='none'" />
+            <div class="foto-meta">
+              <div class="foto-squad">${p.teamName}</div>
+              <div class="foto-detail">tappa ${p.stepId} · tentativo ${p.attempt}</div>
+            </div>
+            <div class="foto-actions">
+              <button class="btn-green" onclick="withFeedback(this, () => decidePhoto('${p.id}', 'approved'))">✅ Approva</button>
+              <button class="btn-red" onclick="withFeedback(this, () => decidePhoto('${p.id}', 'rejected'))">❌ Rigetta</button>
+            </div>
+          </div>`
+          )
+          .join("")}</div>`;
+      } catch (e) {
+        box.innerHTML = `<p id="err">${e.message}</p>`;
+      }
+    }
+
+    async function decidePhoto(photoId, decision) {
+      try {
+        await api(`/api/facilitator/photos/${photoId}/decide`, { method: "POST", body: JSON.stringify({ decision }) });
+        loadPendingPhotos();
+        refreshAll();
+      } catch (e) {
+        alert(e.message);
+      }
+    }
+
+    async function loadGallery() {
+      const status = document.getElementById("galleryStatusFilter").value;
+      const box = document.getElementById("photoGallery");
+      try {
+        const qs = status ? `?status=${status}` : "";
+        const photos = await api(`/api/facilitator/photos${qs}`);
+        if (photos.length === 0) {
+          box.innerHTML = '<p class="empty">Nessuna foto.</p>';
+          return;
+        }
+        const statusClass = { pending: "attesa", approved: "approvato", rejected: "rigettato" };
+        const statusLabel = { pending: "in attesa", approved: "approvata", rejected: "rigettata" };
+        box.innerHTML = `<div class="foto-grid">${photos
+          .map(
+            (p) => `
+          <div class="foto-card ${statusClass[p.status] ?? ""}">
+            <img class="foto-thumb" src="/api/facilitator/photos/${p.id}/image" alt="foto" onerror="this.style.display='none'" />
+            <div class="foto-meta">
+              <div class="foto-squad">${p.teamName}</div>
+              <div class="foto-detail">${statusLabel[p.status] ?? p.status} · tentativo ${p.attempt}</div>
+            </div>
+          </div>`
+          )
+          .join("")}</div>`;
+      } catch (e) {
+        box.innerHTML = `<p id="err">${e.message}</p>`;
+      }
+    }
+
+    document.getElementById("galleryStatusFilter").addEventListener("change", loadGallery);
+
+    startPolling();
+  </script>
+</body>
+</html>

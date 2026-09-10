@@ -3,8 +3,16 @@ import fs from "node:fs";
 import { z } from "zod";
 import { ApiError, asyncRoute, sendOk } from "../lib/response";
 import { facilitatorAuth, facilitatorCanAccessTeam, requireFacilitatorAccess } from "../middleware/facilitatorAuth";
-import { decideItineraryPhoto } from "../lib/itineraryPipeline";
-import { getItineraryPhoto, getTeam, listPendingPhotos } from "../lib/repo";
+import { decideItineraryPhoto, getItineraryOverview } from "../lib/itineraryPipeline";
+import { parseDefinition } from "../lib/gameDefinition";
+import {
+  getGameVersionById,
+  getItineraryPhoto,
+  getSession,
+  getTeam,
+  listPendingPhotos,
+  listPhotosForSession,
+} from "../lib/repo";
 import { photoStorage } from "../lib/uploads";
 
 // Rotte del ruolo facilitatore (Il mistero della città): mirror
@@ -14,6 +22,59 @@ import { photoStorage } from "../lib/uploads";
 // il token regia (spec: "login separati per ruolo").
 export const facilitatorRouter = Router();
 facilitatorRouter.use(facilitatorAuth);
+
+// GET /api/facilitator/overview — dove sono ADESSO le squadre assegnate a
+// questo facilitatore (posizione, punteggio, tappa corrente con
+// coordinate), stesso principio della mappa overview della regia ma
+// scoped al proprio elenco squadre. La fase itinerary è risolta da sola
+// (primo phases[] con mode "itinerary"): il facilitatore non seleziona
+// nulla, a differenza della regia che può avere più fasi/giochi diversi.
+facilitatorRouter.get(
+  "/overview",
+  asyncRoute(async (req, res) => {
+    const session = getSession(req.facilitatorSessionId!);
+    if (!session) throw new ApiError(404, "session_not_found", "Sessione non trovata");
+    const gameVersion = getGameVersionById(session.game_version_id);
+    if (!gameVersion) throw new ApiError(500, "game_version_missing", "game_version mancante");
+    const definition = parseDefinition(gameVersion.definition_json);
+    const phase = definition.phases.find((p) => p.mode === "itinerary");
+    if (!phase) throw new ApiError(400, "no_itinerary_phase", "Questa sessione non ha una fase itinerary");
+
+    const scoped = req.facilitatorTeamIds ?? [];
+    const overview = getItineraryOverview(req.facilitatorSessionId!, phase.id).filter(
+      (entry) => scoped.length === 0 || scoped.includes(entry.teamId)
+    );
+    sendOk(res, overview);
+  })
+);
+
+// GET /api/facilitator/photos?status=... — galleria (tutte le foto, non
+// solo quelle in attesa), scoped alle squadre assegnate — stesso
+// endpoint della regia, con lo scoping aggiunto.
+facilitatorRouter.get(
+  "/photos",
+  asyncRoute(async (req, res) => {
+    const schema = z.object({ status: z.enum(["pending", "approved", "rejected"]).optional() });
+    const { status } = schema.parse(req.query);
+    const scoped = req.facilitatorTeamIds ?? [];
+    const photos = listPhotosForSession(req.facilitatorSessionId!, status, scoped.length > 0 ? scoped : undefined);
+    sendOk(
+      res,
+      photos.map((p) => {
+        const team = getTeam(p.team_id);
+        return {
+          id: p.id,
+          teamId: p.team_id,
+          teamName: team?.name ?? p.team_id,
+          stepId: p.step_id,
+          attempt: p.attempt,
+          status: p.status,
+          createdAt: p.created_at,
+        };
+      })
+    );
+  })
+);
 
 // GET /api/facilitator/photos/pending — foto in attesa di valutazione,
 // filtrate sulle squadre di questo facilitatore (vuoto = tutte quelle

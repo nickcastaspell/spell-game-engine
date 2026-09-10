@@ -787,15 +787,29 @@ export function listPendingPhotos(sessionId: string, teamIds?: string[]): Itiner
  * quelle ancora da decidere). `status` opzionale filtra su un singolo
  * stato ("pending"/"approved"/"rejected"); omesso, restituisce tutte.
  */
-export function listPhotosForSession(sessionId: string, status?: string): ItineraryPhotoRow[] {
+/**
+ * `teamIds` opzionale scopa la galleria alle sole squadre indicate (per
+ * il facilitatore, stesso principio di scoping di listPendingPhotos) —
+ * array vuoto è un caso limite valido ("nessuna squadra assegnata": vedi
+ * facilitatorAuth.ts, ma lì un elenco vuoto significa "tutte", quindi il
+ * chiamante passa `undefined` in quel caso, mai `[]`), array assente =
+ * nessuno scoping (uso regia, vede tutta la sessione).
+ */
+export function listPhotosForSession(sessionId: string, status?: string, teamIds?: string[]): ItineraryPhotoRow[] {
+  if (teamIds && teamIds.length === 0) return [];
+  const conditions = ["session_id = ?"];
+  const params: string[] = [sessionId];
   if (status) {
-    return db
-      .prepare("SELECT * FROM itinerary_photo WHERE session_id = ? AND status = ? ORDER BY created_at DESC")
-      .all(sessionId, status) as unknown as ItineraryPhotoRow[];
+    conditions.push("status = ?");
+    params.push(status);
+  }
+  if (teamIds) {
+    conditions.push(`team_id IN (${teamIds.map(() => "?").join(",")})`);
+    params.push(...teamIds);
   }
   return db
-    .prepare("SELECT * FROM itinerary_photo WHERE session_id = ? ORDER BY created_at DESC")
-    .all(sessionId) as unknown as ItineraryPhotoRow[];
+    .prepare(`SELECT * FROM itinerary_photo WHERE ${conditions.join(" AND ")} ORDER BY created_at DESC`)
+    .all(...params) as unknown as ItineraryPhotoRow[];
 }
 
 export interface VoucherRow {

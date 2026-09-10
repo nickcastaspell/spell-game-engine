@@ -220,3 +220,62 @@ describe("Fase 6: overview regia e galleria foto", () => {
     expect(onlyApproved.json.data.length).toBeGreaterThanOrEqual(1);
   });
 });
+
+describe("interfaccia facilitatore: overview e galleria scoped alle proprie squadre", () => {
+  it("GET /api/facilitator/overview vede solo le squadre assegnate", async () => {
+    const teams = repo.listTeams(hiddenSessionId);
+    const team1 = teams.find((t) => t.access_code === "MAPHID1")!;
+
+    const created = await post(
+      `/api/control/sessions/${hiddenSessionId}/facilitators`,
+      { name: "Facilitatore scoped", teamIds: [team1.id] },
+      "test-control-token"
+    );
+    const facToken = created.json.data.token as string;
+
+    const overview = await get("/api/facilitator/overview", facToken);
+    expect(overview.status).toBe(200);
+    expect(overview.json.data).toHaveLength(1);
+    expect(overview.json.data[0].teamId).toBe(team1.id);
+    // Non deve esporre l'intero percorso, solo la tappa corrente (stesso
+    // principio dell'overview regia — non spoilerare le altre squadre).
+    expect(overview.json.data[0].sequence).toBeUndefined();
+  });
+
+  it("un facilitatore senza squadre assegnate vede tutta la sessione (elenco vuoto = tutte)", async () => {
+    const created = await post(
+      `/api/control/sessions/${hiddenSessionId}/facilitators`,
+      { name: "Facilitatore generico", teamIds: [] },
+      "test-control-token"
+    );
+    const facToken = created.json.data.token as string;
+
+    const overview = await get("/api/facilitator/overview", facToken);
+    expect(overview.status).toBe(200);
+    expect(overview.json.data.length).toBe(repo.listTeams(hiddenSessionId).length);
+  });
+
+  it("GET /api/facilitator/photos mostra solo le foto delle proprie squadre", async () => {
+    const teams = repo.listTeams(hiddenSessionId);
+    const team1 = teams.find((t) => t.access_code === "MAPHID1")!; // ha foto (test precedente)
+    const team2 = teams.find((t) => t.access_code === "MAPHID2")!; // nessuna foto
+
+    const facForTeam1 = await post(
+      `/api/control/sessions/${hiddenSessionId}/facilitators`,
+      { name: "Fac team1", teamIds: [team1.id] },
+      "test-control-token"
+    );
+    const galleryTeam1 = await get("/api/facilitator/photos", facForTeam1.json.data.token);
+    expect(galleryTeam1.status).toBe(200);
+    expect(galleryTeam1.json.data.length).toBeGreaterThan(0);
+    expect(galleryTeam1.json.data.every((p: { teamId: string }) => p.teamId === team1.id)).toBe(true);
+
+    const facForTeam2 = await post(
+      `/api/control/sessions/${hiddenSessionId}/facilitators`,
+      { name: "Fac team2", teamIds: [team2.id] },
+      "test-control-token"
+    );
+    const galleryTeam2 = await get("/api/facilitator/photos", facForTeam2.json.data.token);
+    expect(galleryTeam2.json.data).toHaveLength(0);
+  });
+});
