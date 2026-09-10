@@ -40,6 +40,7 @@
 
   <fieldset>
     <legend>Bozze</legend>
+    <button id="reloadDraftsBtn" class="secondary" style="width:auto">🔄 Aggiorna elenco bozze</button>
     <div id="draftsList"><p>Caricamento…</p></div>
 
     <h4>Nuova bozza</h4>
@@ -403,6 +404,11 @@
     document.getElementById("saveDraftBtn").addEventListener("click", saveDraft);
     document.getElementById("publishDraftBtn").addEventListener("click", publishDraft);
     document.getElementById("deleteDraftBtn").addEventListener("click", deleteDraft);
+    document.getElementById("reloadDraftsBtn").addEventListener("click", loadDrafts);
+    // Il primo caricamento (sotto) parte prima che l'utente abbia potuto
+    // scrivere il token: se poi lo inserisce/corregge, ricarica da sola
+    // appena esce dal campo, senza dover premere "Aggiorna" a mano.
+    document.getElementById("token").addEventListener("blur", loadDrafts);
 
     loadDrafts();
   </script>
