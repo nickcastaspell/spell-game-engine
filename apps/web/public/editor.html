@@ -20,7 +20,15 @@
     .row { display: flex; gap: 0.5rem; flex-wrap: wrap; align-items: center; }
     #err { color: #b91c1c; }
     .tappa-card { border: 1px solid #ddd; border-radius: 8px; padding: 0.75rem; margin-bottom: 0.75rem; background: #fafafa; }
-    .tappa-card.picking { border-color: #4338ca; box-shadow: 0 0 0 2px #4338ca33; }
+    .pick-btn.active {
+      background: #16a34a;
+      box-shadow: 0 0 0 3px #16a34a55;
+      animation: pick-pulse 1.2s ease-in-out infinite;
+    }
+    @keyframes pick-pulse {
+      0%, 100% { box-shadow: 0 0 0 3px #16a34a55; }
+      50% { box-shadow: 0 0 0 6px #16a34a22; }
+    }
     .tappa-card .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(9rem, 1fr)); gap: 0.5rem; }
     .tappa-card .grid label { margin-top: 0; }
     .tappa-card .grid input, .tappa-card .grid select { width: 100%; box-sizing: border-box; }
@@ -230,7 +238,7 @@
         .map((t, idx) => {
           t.config = t.config ?? {};
           return `
-        <div class="tappa-card ${pickingForIdx === idx ? "picking" : ""}">
+        <div class="tappa-card">
           <div class="grid">
             <div><label>Numero</label><input type="number" value="${t.number}" data-field="number" data-idx="${idx}" /></div>
             <div><label>Tipo</label>
@@ -254,7 +262,9 @@
             <div>${configFieldsFor(t.type, t, idx)}</div>
           </div>
           <div class="row" style="margin-top:0.5rem">
-            <button type="button" class="secondary" data-pick="${idx}">📍 Imposta su mappa</button>
+            <button type="button" class="secondary pick-btn ${pickingForIdx === idx ? "active" : ""}" data-pick="${idx}">
+              ${pickingForIdx === idx ? "📍 Clicca sulla mappa qui sotto…" : "📍 Imposta su mappa"}
+            </button>
             <button type="button" class="secondary" data-dup="${idx}">Duplica</button>
             <button type="button" class="danger" data-remove="${idx}">Rimuovi</button>
           </div>
