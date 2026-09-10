@@ -19,7 +19,6 @@
     button.danger { background: #b91c1c; }
     .row { display: flex; gap: 0.5rem; flex-wrap: wrap; align-items: center; }
     #err { color: #b91c1c; }
-    .tappa-card { border: 1px solid #ddd; border-radius: 8px; padding: 0.75rem; margin-bottom: 0.75rem; background: #fafafa; }
     .pick-btn.active {
       background: #16a34a;
       box-shadow: 0 0 0 3px #16a34a55;
@@ -29,11 +28,32 @@
       0%, 100% { box-shadow: 0 0 0 3px #16a34a55; }
       50% { box-shadow: 0 0 0 6px #16a34a22; }
     }
-    .tappa-card .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(9rem, 1fr)); gap: 0.5rem; }
-    .tappa-card .grid label { margin-top: 0; }
-    .tappa-card .grid input, .tappa-card .grid select { width: 100%; box-sizing: border-box; }
-    #map { height: 320px; border-radius: 8px; margin-top: 0.5rem; }
     small.hint { color: #666; display: block; margin-top: 0.3rem; }
+
+    /* Layout a due colonne: lista tappe a sinistra (scorre libera), mappa +
+       Salva/Pubblica "agganciate" a destra (restano visibili durante lo
+       scroll della lista) — pensato per liste lunghe (20-35 tappe), dove
+       altrimenti bisognava scorrere fino in fondo per la mappa e poi
+       tornare su/giù per salvare. */
+    .tappe-layout { display: flex; gap: 1rem; align-items: flex-start; }
+    .tappe-list-col { flex: 1 1 auto; min-width: 0; }
+    .map-col { position: sticky; top: 0.75rem; width: 23rem; flex: 0 0 auto; }
+    @media (max-width: 780px) {
+      .tappe-layout { flex-direction: column; }
+      .map-col { position: static; width: auto; }
+    }
+    #map { height: 620px; border-radius: 8px; }
+
+    .tappa-row { display: flex; align-items: center; gap: 0.35rem; border: 1px solid #ddd; border-radius: 6px; padding: 0.3rem 0.5rem; margin-bottom: 0.3rem; background: #fafafa; }
+    .tappa-row .tappa-num { width: 1.8rem; text-align: right; color: #888; font-size: 0.85rem; flex-shrink: 0; }
+    .tappa-row select.tappa-type-inline { width: 8.5rem; flex-shrink: 0; margin: 0; }
+    .tappa-row input.tappa-title-inline { flex: 1 1 auto; min-width: 0; margin: 0; }
+    .tappa-row .coord-badge { flex-shrink: 0; font-size: 0.95rem; width: 1.3rem; text-align: center; }
+    .tappa-row button { padding: 0.35rem 0.5rem; margin: 0; width: auto; flex-shrink: 0; }
+    .tappa-detail { border: 1px solid #ddd; border-top: none; border-radius: 0 0 6px 6px; padding: 0.75rem; margin: -0.3rem 0 0.4rem; background: #fff; }
+    .tappa-detail .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(9rem, 1fr)); gap: 0.5rem; }
+    .tappa-detail .grid label { margin-top: 0; }
+    .tappa-detail .grid input, .tappa-detail .grid select { width: 100%; box-sizing: border-box; }
   </style>
 </head>
 <body>
@@ -77,19 +97,23 @@
     <p><small class="hint">Una versione già pubblicata è immutabile: per ripubblicare con delle modifiche, cambia prima il numero di versione qui sopra (es. da 0.1 a 0.2) — "🔁 Incrementa" lo fa in automatico.</small></p>
 
     <h4>Tappe</h4>
-    <p><small class="hint">Clicca "📍 Imposta su mappa" su una tappa, poi clicca un punto sulla mappa qui sotto per impostarne lat/lng.</small></p>
-    <div id="tappeList"></div>
-    <button id="addTappaBtn" class="secondary">+ Aggiungi tappa</button>
-
-    <div id="map"></div>
-
-    <div class="row" style="margin-top:1rem">
-      <button id="saveDraftBtn">Salva bozza</button>
-      <button id="publishDraftBtn" class="secondary">Pubblica</button>
-      <button id="deleteDraftBtn" class="danger">Elimina bozza</button>
+    <p><small class="hint">Una riga per tappa — clicca "▼" per aprire i dettagli (testo, indizio, blocco/gruppi), "📍" per impostare la posizione cliccando sulla mappa qui a fianco.</small></p>
+    <div class="tappe-layout">
+      <div class="tappe-list-col">
+        <div id="tappeList"></div>
+        <button id="addTappaBtn" class="secondary">+ Aggiungi tappa</button>
+      </div>
+      <div class="map-col">
+        <div id="map"></div>
+        <div class="row" style="margin-top:0.75rem">
+          <button id="saveDraftBtn">Salva bozza</button>
+          <button id="publishDraftBtn" class="secondary">Pubblica</button>
+          <button id="deleteDraftBtn" class="danger">Elimina bozza</button>
+        </div>
+        <p id="editorErr" style="color:#b91c1c"></p>
+        <p id="editorOk" style="color:#15803d"></p>
+      </div>
     </div>
-    <p id="editorErr" style="color:#b91c1c"></p>
-    <p id="editorOk" style="color:#15803d"></p>
   </fieldset>
 
   <script>
@@ -134,6 +158,7 @@
 
     let currentDraft = null; // { id, slug, name, definition } della bozza aperta
     let pickingForIdx = null; // indice della tappa in attesa di un click sulla mappa
+    let expandedIndexes = new Set(); // indici delle tappe con il dettaglio aperto (testo/indizio/blocco/gruppi/coordinate)
     let map = null;
     let mapMarkers = [];
 
@@ -200,6 +225,7 @@
     function openDraftData(draft) {
       currentDraft = draft;
       pickingForIdx = null;
+      expandedIndexes = new Set();
       document.getElementById("draftEditor").style.display = "block";
       document.getElementById("editingName").textContent = `${draft.name} (${draft.slug})`;
       document.getElementById("draftName").value = draft.name;
@@ -225,12 +251,16 @@
         config: {},
         points: 0,
       });
+      // Una tappa nuova parte aperta (serve compilarla subito); quelle
+      // esistenti restano collassate nella vista compatta.
+      expandedIndexes.add(currentDraft.definition.content.tappe.length - 1);
       renderTappe();
     }
 
     function removeTappa(idx) {
       currentDraft.definition.content.tappe.splice(idx, 1);
       if (pickingForIdx === idx) pickingForIdx = null;
+      expandedIndexes = new Set(); // gli indici dopo idx si sono spostati, evita stati aperti sbagliati
       renderTappe();
       refreshMapMarkers();
     }
@@ -240,6 +270,7 @@
       copy.number = nextTappaNumber();
       copy.id = `tappa-${copy.number}`;
       currentDraft.definition.content.tappe.splice(idx + 1, 0, copy);
+      expandedIndexes = new Set(); // stesso motivo di removeTappa
       renderTappe();
       refreshMapMarkers();
     }
@@ -270,38 +301,45 @@
       box.innerHTML = tappe
         .map((t, idx) => {
           t.config = t.config ?? {};
-          return `
-        <div class="tappa-card">
+          const expanded = expandedIndexes.has(idx);
+          const picking = pickingForIdx === idx;
+          const hasCoords = typeof t.config.lat === "number" && typeof t.config.lng === "number";
+
+          const row = `
+        <div class="tappa-row">
+          <span class="tappa-num">${t.number}.</span>
+          <select class="tappa-type-inline" data-field="type" data-idx="${idx}">
+            ${STEP_TYPES.map((s) => `<option value="${s}" ${t.type === s ? "selected" : ""}>${s}</option>`).join("")}
+          </select>
+          <input class="tappa-title-inline" placeholder="Titolo tappa" value="${t.title ?? ""}" data-field="title" data-idx="${idx}" />
+          <span class="coord-badge" title="${hasCoords ? "coordinate impostate" : "coordinate mancanti"}">${hasCoords ? "📍" : "⚠️"}</span>
+          <button type="button" class="secondary pick-btn ${picking ? "active" : ""}" data-pick="${idx}" title="${picking ? "Clicca un punto sulla mappa" : "Imposta su mappa"}">
+            ${picking ? "📍…" : "📍"}
+          </button>
+          <button type="button" class="secondary" data-toggle="${idx}" title="${expanded ? "Chiudi dettagli" : "Apri dettagli"}">${expanded ? "▲" : "▼"}</button>
+          <button type="button" class="secondary" data-dup="${idx}" title="Duplica">⧉</button>
+          <button type="button" class="danger" data-remove="${idx}" title="Rimuovi">✕</button>
+        </div>`;
+
+          const detail = expanded
+            ? `
+        <div class="tappa-detail">
           <div class="grid">
-            <div><label>Numero</label><input type="number" value="${t.number}" data-field="number" data-idx="${idx}" /></div>
-            <div><label>Tipo</label>
-              <select data-field="type" data-idx="${idx}">
-                ${STEP_TYPES.map((s) => `<option value="${s}" ${t.type === s ? "selected" : ""}>${s}</option>`).join("")}
-              </select>
-            </div>
             <div><label>Punti</label><input type="number" value="${t.points ?? 0}" data-field="points" data-idx="${idx}" /></div>
             <div><label>Blocco (opz.)</label><input value="${t.block ?? ""}" data-field="block" data-idx="${idx}" /></div>
             <div><label>Gruppi (opz., numeri squadra separati da virgola)</label><input value="${(t.groups ?? []).join(",")}" data-field="groups" data-idx="${idx}" /></div>
-          </div>
-          <label>Titolo</label>
-          <input style="width:100%; box-sizing:border-box" value="${t.title ?? ""}" data-field="title" data-idx="${idx}" />
-          <label>Testo</label>
-          <textarea rows="2" data-field="body" data-idx="${idx}">${t.body ?? ""}</textarea>
-          <label>Indizio (opz.)</label>
-          <input style="width:100%; box-sizing:border-box" value="${t.hint ?? ""}" data-field="hint" data-idx="${idx}" />
-          <div class="grid">
             <div><label>Latitudine</label><input type="number" step="any" value="${t.config.lat ?? ""}" data-field="config.lat" data-idx="${idx}" /></div>
             <div><label>Longitudine</label><input type="number" step="any" value="${t.config.lng ?? ""}" data-field="config.lng" data-idx="${idx}" /></div>
             <div>${configFieldsFor(t.type, t, idx)}</div>
           </div>
-          <div class="row" style="margin-top:0.5rem">
-            <button type="button" class="secondary pick-btn ${pickingForIdx === idx ? "active" : ""}" data-pick="${idx}">
-              ${pickingForIdx === idx ? "📍 Clicca sulla mappa qui sotto…" : "📍 Imposta su mappa"}
-            </button>
-            <button type="button" class="secondary" data-dup="${idx}">Duplica</button>
-            <button type="button" class="danger" data-remove="${idx}">Rimuovi</button>
-          </div>
-        </div>`;
+          <label>Testo</label>
+          <textarea rows="2" data-field="body" data-idx="${idx}">${t.body ?? ""}</textarea>
+          <label>Indizio (opz.)</label>
+          <input style="width:100%; box-sizing:border-box" value="${t.hint ?? ""}" data-field="hint" data-idx="${idx}" />
+        </div>`
+            : "";
+
+          return row + detail;
         })
         .join("");
 
@@ -311,6 +349,14 @@
       box.querySelectorAll("[data-pick]").forEach((b) => {
         b.addEventListener("click", () => {
           pickingForIdx = pickingForIdx === Number(b.dataset.pick) ? null : Number(b.dataset.pick);
+          renderTappe();
+        });
+      });
+      box.querySelectorAll("[data-toggle]").forEach((b) => {
+        b.addEventListener("click", () => {
+          const i = Number(b.dataset.toggle);
+          if (expandedIndexes.has(i)) expandedIndexes.delete(i);
+          else expandedIndexes.add(i);
           renderTappe();
         });
       });
