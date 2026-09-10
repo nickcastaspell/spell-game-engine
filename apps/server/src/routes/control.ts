@@ -36,6 +36,7 @@ import {
   getTeam,
   listAcceptedSubmissions,
   listActiveDeviceSessionsForTeams,
+  listAllSessionsWithMeta,
   listFacilitators,
   listGames,
   listPendingPhotos,
@@ -74,6 +75,30 @@ controlRouter.get(
   "/games",
   asyncRoute(async (_req, res) => {
     sendOk(res, listGames().map((g) => ({ slug: g.slug, name: g.name })));
+  })
+);
+
+// GET /api/control/sessions — elenco di tutte le sessioni (nome, stato,
+// gioco, squadre). A differenza di Reset/Duplica/Riapri/Elimina (vedi
+// routes/dev.ts, solo ambiente di sviluppo), la sola LETTURA dell'elenco
+// non è pericolosa e serve anche in produzione: senza questo endpoint,
+// la regia che crea una sessione e poi lascia/ricarica la pagina non ha
+// alcun modo di ritrovarla — bug reale segnalato dall'utente (il
+// selettore "1. Crea sessione" da solo permette solo di crearne una
+// nuova, non di riaprire quella già creata).
+controlRouter.get(
+  "/sessions",
+  asyncRoute(async (_req, res) => {
+    const rows = listAllSessionsWithMeta();
+    sendOk(
+      res,
+      rows.map((r) => ({
+        ...toSessionView(r),
+        gameName: r.game_name,
+        gameSlug: r.game_slug,
+        teamCount: r.team_count,
+      }))
+    );
   })
 );
 

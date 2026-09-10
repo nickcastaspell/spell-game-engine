@@ -43,10 +43,10 @@
     <legend>Connessione</legend>
     <label>Token regia</label>
     <input id="token" placeholder="nick" />
-    <button id="reloadSessionsBtn" class="secondary dev-only">Aggiorna elenco sessioni</button>
+    <button id="reloadSessionsBtn" class="secondary">Aggiorna elenco sessioni</button>
   </fieldset>
 
-  <fieldset class="dev-only" id="archiveFieldset">
+  <fieldset id="archiveFieldset">
     <legend>Sessioni</legend>
     <div id="sessionsList"><p>Nessuna sessione.</p></div>
   </fieldset>
@@ -237,15 +237,19 @@
         el.style.display = devMode ? "" : "none";
       });
       document.getElementById("devBanner").style.display = devMode ? "block" : "none";
-      if (devMode) loadSessionsArchive();
+      loadSessionsArchive();
     }
 
-    // --- Archivio sessioni (solo dev) ---
+    // --- Elenco sessioni: sempre visibile, anche in produzione (usa
+    // GET /api/control/sessions, una LETTURA senza effetti — a differenza
+    // di Duplica/Riapri/Elimina, che restano azioni da ambiente di
+    // sviluppo, vedi routes/dev.ts) — senza questo, chi crea una sessione
+    // e lascia/ricarica la pagina non avrebbe modo di ritrovarla. ---
 
     async function loadSessionsArchive() {
       const box = document.getElementById("sessionsList");
       try {
-        const sessions = await api("/api/dev/sessions");
+        const sessions = await api("/api/control/sessions");
         if (sessions.length === 0) {
           box.innerHTML = "<p>Nessuna sessione.</p>";
           return;
@@ -261,10 +265,14 @@
               <span><small>${s.createdAt}</small></span>
               <span>${s.teamCount} squadre</span>
               <button onclick="withFeedback(this, () => openSessionInDashboard('${s.id}'))">Apri</button>
-              <button class="secondary" onclick="withFeedback(this, () => duplicateSessionArchive('${s.id}'))">Duplica</button>
               <button class="secondary" onclick="withFeedback(this, () => archiveSessionArchive('${s.id}'))" ${canArchive ? "" : 'disabled title="solo da COMPLETED"'}>Archivia</button>
-              ${canReopen ? `<button class="secondary" onclick="withFeedback(this, () => reopenSessionArchive('${s.id}'))">Riapri</button>` : ""}
-              <button class="danger" onclick="withFeedback(this, () => deleteSessionArchive('${s.id}'))">Elimina (DEV)</button>
+              ${
+                devMode
+                  ? `<button class="secondary" onclick="withFeedback(this, () => duplicateSessionArchive('${s.id}'))">Duplica</button>
+                     ${canReopen ? `<button class="secondary" onclick="withFeedback(this, () => reopenSessionArchive('${s.id}'))">Riapri</button>` : ""}
+                     <button class="danger" onclick="withFeedback(this, () => deleteSessionArchive('${s.id}'))">Elimina (DEV)</button>`
+                  : ""
+              }
             </div>`;
           })
           .join("");
@@ -373,7 +381,7 @@
           }),
         });
         openSessionInDashboard(session.id);
-        if (devMode) loadSessionsArchive();
+        loadSessionsArchive();
       } catch (e) {
         document.getElementById("err").textContent = e.message;
       }
