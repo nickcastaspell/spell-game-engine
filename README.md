@@ -436,14 +436,84 @@ arricchimenti:
   un'interfaccia (`PhotoStorage`) pensata apposta perché passare a Drive
   sia un nuovo modulo che la implementa, non una riscrittura di chi la
   chiama — coerente con la preferenza storica dell'utente per Drive.
-- **UI più curva**: la UI attuale è funzionale (polling ogni 4s, stessa
-  architettura di Less is More) ma minimale — niente mappa, niente
-  galleria foto per la regia oltre alle miniature in coda, niente vista
-  "percorso completo" per il tavolo.
+- **UI più curata**: mappa e galleria foto sono state costruite (vedi
+  sezione sotto); restano niente chat/bacheca, niente flusso barista per i
+  voucher, niente storage foto su Drive (elenco invariato per queste tre).
+
+## Editor caccia, georeferenziazione, percorsi e mappe
+
+Sei aggiunte al motore itinerary, pensate per rendere "Il mistero della
+città" — e qualunque nuova caccia dello stesso tipo — costruibile e
+osservabile dalla regia senza toccare file JSON a mano né il codice.
+
+1. **Modulo tappa `geoAnswer`** (`packages/game-core/src/modules/geoAnswer.ts`):
+   risposta verificata via posizione geografica invece che testo — la
+   squadra invia le coordinate rilevate dal GPS del telefono
+   (`navigator.geolocation`, `team.html`) o inserite a mano se il permesso
+   è negato, corretta entro `config.toleranceMeters` (default 40m) dal
+   punto atteso. Stessa logica di tentativo/riprova di `textMatch`.
+2. **Distanza prevista di un percorso**: `haversineMeters` e
+   `computeRouteDistanceMeters` (`packages/game-core/src/itineraryRouting.ts`,
+   pure, testate) sommano le distanze tra tappe consecutive; una tappa
+   senza `lat`/`lng` in `config` interrompe la catena in quel punto invece
+   di far fallire il calcolo.
+3. **Percorsi squadra dalla regia** (`GET`/`PUT
+   /api/control/sessions/:id/itinerary/teams/:teamId/route`,
+   `itineraryPipeline.ts`): la regia vede la distanza prevista di ogni
+   squadra e può riordinare a mano le tappe **non ancora raggiunte** —
+   riscrivere l'ordine di quelle già completate è rifiutato
+   esplicitamente (409 `route_prefix_mismatch`), con lo stesso optimistic
+   locking (`repo.setTeamRouteWithVersionCheck`) usato per le submission,
+   sulla stessa colonna `version`. UI in `control.html`, sezione "Percorsi
+   squadra" del pannello itinerario.
+4. **Editor "città/tappe"** (`apps/server/src/routes/authoring.ts`,
+   `apps/web/public/editor.html`): prima serviva modificare a mano un file
+   in `game-definitions/` e rilanciare `npm run seed` per pubblicare un
+   gioco. Ora la regia può creare una **bozza** (`game_draft`, tabella
+   dedicata — modificabile liberamente, validata solo strutturalmente ad
+   ogni salvataggio), popolarla con un form (tappe, tipo, punti, indizio,
+   blocco/gruppi, coordinate impostabili anche cliccando su una mini-mappa
+   Leaflet) e **pubblicarla** (`POST .../game-drafts/:id/publish`) — a
+   quel punto passa dalla stessa validazione semantica e dalle stesse
+   `upsertGame`/`upsertGameVersion` di `seed.ts`, diventa una
+   `game_version` immutabile come le altre. `basedOn` clona un gioco già
+   pubblicato come punto di partenza (es. una nuova città sullo scheletro
+   de "Il mistero della città").
+5. **Mappa del tavolo** (`team.html`, dentro `renderItinerary`): percorso
+   proprio della squadra — tappe fatte in verde, corrente evidenziata,
+   tappe **future assenti dalla mappa per default**
+   (`itinerary.showUpcomingStops` nella game definition, default `false`):
+   per molte tappe individuare il luogo fa parte dell'indizio, mostrarlo
+   in anticipo lo banalizzerebbe. La distinzione vive lato server
+   (`getItineraryStatus` → nuovo campo `route`, funzione
+   `resolveRouteView` in `itineraryPipeline.ts`), il client disegna solo
+   quello che riceve.
+6. **Mappa overview + galleria foto in regia** (`control.html`): un
+   marker per squadra con la sola tappa corrente
+   (`GET .../itinerary/overview`, `getItineraryOverview` —
+   non l'intero percorso, non deve spoilerare le squadre le une con le
+   altre), e una galleria di sola lettura con **tutte** le foto della
+   sessione filtrabili per stato (`GET .../itinerary/photos?status=`,
+   `repo.listPhotosForSession`) — il pannello "Foto in attesa" esistente
+   resta invariato, operativo per approvare/rigettare.
+
+Mappa in entrambe le UI: **Leaflet + OpenStreetMap** via CDN, nessuna API
+key, coerente con la filosofia "zero dipendenze esterne da scaricare" già
+seguita nel progetto (vedi nota su Prisma/`node:sqlite` più sopra).
+
+`npm test` copre tutto questo con test end-to-end dedicati
+(`geoAnswer` dentro/fuori tolleranza, calcolo distanza con coordinate
+mancanti, override percorso con vincolo sul prefisso già completato,
+bozza→pubblicazione con validazione strutturale/semantica e clonazione
+`basedOn`, anti-spoiler della mappa con e senza `showUpcomingStops`,
+overview e galleria).
 
 ## Prossimo passo
 
 Con due giochi reali sul motore (Less is More: fasi sincronizzate;
-Il mistero della città: percorso per squadra), il core ha già dimostrato
-di generalizzare oltre il primo MVP. I prossimi giochi da migrare
-diranno se serve un terzo `mode` di fase o se i due esistenti bastano.
+Il mistero della città: percorso per squadra, ora anche autorabile dalla
+regia) e le sei aggiunte sopra, il core ha dimostrato di generalizzare
+oltre il primo MVP e di reggere una vera capacità di authoring, non solo
+di runtime. Restano esplicitamente fuori scope: chat/bacheca, flusso
+barista per i voucher, storage foto su Drive, editor per i facilitatori
+(non hanno ancora una UI dedicata), un terzo `mode` di fase.

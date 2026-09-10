@@ -26,6 +26,7 @@ const ItineraryPhaseDefinitionSchema = z.object({
   }),
   maxPhotoAttempts: z.number().int().positive().optional(),
   hintPenalty: z.number().int().nonnegative().optional(),
+  showUpcomingStops: z.boolean().optional(),
 });
 
 // "activity" e "itinerary" sono entrambi opzionali qui a livello strutturale

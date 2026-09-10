@@ -42,14 +42,14 @@ const definition = {
   ],
   content: {
     tappe: [
-      { id: "t-start", number: 1, type: "start", title: "Start", body: "", config: {}, points: 0 },
+      { id: "t-start", number: 1, type: "start", title: "Start", body: "", config: { lat: 44.493, lng: 11.342 }, points: 0 },
       {
         id: "t-quiz",
         number: 2,
         type: "textMatch",
         title: "Quiz",
         body: "In che città siamo?",
-        config: { expectedAnswer: "Bologna", kind: "testo" },
+        config: { expectedAnswer: "Bologna", kind: "testo", lat: 44.4935, lng: 11.3425 },
         points: 10,
         hint: "È una città dell'Emilia-Romagna",
       },
@@ -59,12 +59,48 @@ const definition = {
         type: "textMatch",
         title: "Guida",
         body: "Chiedi alla guida il nome della torre",
-        config: { expectedAnswer: "Asinelli", kind: "guida" },
+        config: { expectedAnswer: "Asinelli", kind: "guida", lat: 44.4938, lng: 11.343 },
         points: 5,
       },
-      { id: "t-foto", number: 4, type: "photoApproval", title: "Foto di gruppo", body: "", config: {}, points: 20 },
-      { id: "t-buono", number: 5, type: "voucher", title: "Buono bar", body: "", config: {}, points: 0 },
-      { id: "t-finale", number: 6, type: "finale", title: "Arrivo", body: "", config: {}, points: 0 },
+      {
+        id: "t-foto",
+        number: 4,
+        type: "photoApproval",
+        title: "Foto di gruppo",
+        body: "",
+        config: { lat: 44.4942, lng: 11.3432 },
+        points: 20,
+      },
+      {
+        id: "t-buono",
+        number: 5,
+        type: "voucher",
+        title: "Buono bar",
+        body: "",
+        config: { lat: 44.4945, lng: 11.3429 },
+        points: 0,
+      },
+      {
+        id: "t-geo",
+        number: 6,
+        type: "geoAnswer",
+        title: "Piazza Maggiore",
+        body: "Raggiungete il centro di Piazza Maggiore e inviate la vostra posizione",
+        // Coordinate reali (Piazza Maggiore, Bologna); tolleranza volutamente
+        // stretta per poter testare anche il caso "fuori tolleranza" con un
+        // punto a poche decine di metri di distanza.
+        config: { lat: 44.4939, lng: 11.3427, toleranceMeters: 30 },
+        points: 15,
+      },
+      {
+        id: "t-finale",
+        number: 7,
+        type: "finale",
+        title: "Arrivo",
+        body: "",
+        config: { lat: 44.495, lng: 11.3435 },
+        points: 0,
+      },
     ],
   },
   rules: {},
@@ -76,6 +112,14 @@ const definitionRaw = JSON.stringify(definition);
 const expectedAnswerByStepId: Record<string, string> = {
   "t-quiz": "Bologna",
   "t-guida": "asinelli",
+};
+
+// Stesse coordinate di config.lat/lng della tappa "t-geo" sopra: una
+// submission con questo payload è sempre "esattamente corretta" (distanza
+// 0), usata dagli helper generici per superare la tappa senza dover
+// conoscere il dettaglio del test corrente.
+const geoAnswerByStepId: Record<string, { lat: number; lng: number }> = {
+  "t-geo": { lat: 44.4939, lng: 11.3427 },
 };
 
 let server: Server;
@@ -95,6 +139,15 @@ async function post(pathname: string, body: unknown, token: string) {
 
 async function get(pathname: string, token: string) {
   const res = await fetch(`${base}${pathname}`, { headers: { authorization: `Bearer ${token}` } });
+  return { status: res.status, json: await res.json() };
+}
+
+async function put(pathname: string, body: unknown, token: string) {
+  const res = await fetch(`${base}${pathname}`, {
+    method: "PUT",
+    headers: { "content-type": "application/json", authorization: `Bearer ${token}` },
+    body: JSON.stringify(body),
+  });
   return { status: res.status, json: await res.json() };
 }
 
@@ -122,6 +175,15 @@ async function resolveStepGenerically(
     await post(
       "/api/team/itinerary/submit",
       { stepId: step.id, payload: { answer }, idempotencyKey: `${idemPrefix}-${step.id}` },
+      token
+    );
+    return;
+  }
+  if (step.view.type === "geoAnswer") {
+    const position = geoAnswerByStepId[step.id];
+    await post(
+      "/api/team/itinerary/submit",
+      { stepId: step.id, payload: position, idempotencyKey: `${idemPrefix}-${step.id}` },
       token
     );
     return;
@@ -205,7 +267,7 @@ describe("itinerario end-to-end (REST)", () => {
     expect(res.status).toBe(200);
     expect(res.json.data.teams).toHaveLength(2);
     for (const t of res.json.data.teams) {
-      expect(t.stepsCount).toBe(6); // start + quiz + guida + foto + buono + finale
+      expect(t.stepsCount).toBe(7); // start + quiz + guida + foto + buono + geo + finale
     }
   });
 
@@ -225,10 +287,10 @@ describe("itinerario end-to-end (REST)", () => {
     const finalStatus = await get("/api/team/itinerary/status", token);
     expect(finalStatus.json.data.completed).toBe(true);
 
-    // 10 (quiz) + 5 (guida) + 20 (foto, approvata dall'helper) = 35, il buono non dà punti.
+    // 10 (quiz) + 5 (guida) + 20 (foto, approvata dall'helper) + 15 (geo, coordinate esatte) = 50, il buono non dà punti.
     const teamState = repo.getTeamState(teamAId)!;
     const parsedState = JSON.parse(teamState.state_json);
-    expect(parsedState.score).toBe(35);
+    expect(parsedState.score).toBe(50);
 
     const voucher = repo.findVoucherForStep(sessionId, teamAId, "t-buono");
     expect(voucher).toBeDefined();
@@ -271,6 +333,41 @@ describe("itinerario end-to-end (REST)", () => {
 
     const scoreAfterRight = JSON.parse(repo.getTeamState(teamBId)!.state_json).score ?? 0;
     expect(scoreAfterRight).toBe(scoreBeforeAttempts + 10);
+  });
+
+  it("geoAnswer: una posizione entro la tolleranza avanza e assegna punti, fuori tolleranza no", async () => {
+    const teamG = repo.createTeam(sessionId, "Tavolo G", "ITINGGG");
+    repo.ensureTeamState(teamG.id);
+    const { generateAndAssignRoutes } = await import("../../apps/server/src/lib/itineraryPipeline");
+    generateAndAssignRoutes(sessionId, "percorso");
+
+    const login = await post("/api/team/login", { accessCode: "ITINGGG" }, "");
+    const token = login.json.data.token as string;
+
+    const step = await advanceUntilStepId(token, "t-geo", "flowE-setup");
+    const scoreBefore = JSON.parse(repo.getTeamState(teamG.id)!.state_json).score ?? 0;
+
+    // ~67m a nord del punto atteso (config.lat/lng, tolleranza 30m): fuori tolleranza.
+    const tooFar = await post(
+      "/api/team/itinerary/submit",
+      { stepId: step.id, payload: { lat: 44.4939 + 0.0006, lng: 11.3427 }, idempotencyKey: "flowE-far-1" },
+      token
+    );
+    expect(tooFar.status).toBe(201); // tentativo accettato, solo non corretto
+    const statusAfterFar = await get("/api/team/itinerary/status", token);
+    expect(statusAfterFar.json.data.step.id).toBe("t-geo"); // non avanzato
+    expect(JSON.parse(repo.getTeamState(teamG.id)!.state_json).score ?? 0).toBe(scoreBefore);
+
+    // ~17m a nord del punto atteso: entro la tolleranza di 30m.
+    const closeEnough = await post(
+      "/api/team/itinerary/submit",
+      { stepId: step.id, payload: { lat: 44.4939 + 0.00015, lng: 11.3427 }, idempotencyKey: "flowE-close-1" },
+      token
+    );
+    expect(closeEnough.status).toBe(201);
+    const statusAfterClose = await get("/api/team/itinerary/status", token);
+    expect(statusAfterClose.json.data.step.id).not.toBe("t-geo");
+    expect(JSON.parse(repo.getTeamState(teamG.id)!.state_json).score ?? 0).toBe(scoreBefore + 15);
   });
 
   it("il suggerimento penalizza il punteggio solo la prima volta per tappa", async () => {
@@ -450,5 +547,129 @@ describe("itinerario end-to-end (REST)", () => {
       token
     );
     expect(attempt3.status).toBe(409);
+  });
+
+  describe("regia: dettaglio e override manuale del percorso squadra (Fase 4)", () => {
+    it("GET .../route restituisce sequenza, dettaglio tappe e distanza prevista", async () => {
+      const teamH = repo.createTeam(sessionId, "Tavolo H", "ITINHHH");
+      repo.ensureTeamState(teamH.id);
+      const { generateAndAssignRoutes } = await import("../../apps/server/src/lib/itineraryPipeline");
+      generateAndAssignRoutes(sessionId, "percorso");
+
+      const res = await get(
+        `/api/control/sessions/${sessionId}/itinerary/teams/${teamH.id}/route?phaseId=percorso`,
+        "test-control-token"
+      );
+      expect(res.status).toBe(200);
+      expect(res.json.data.sequence).toHaveLength(7);
+      expect(new Set(res.json.data.sequence)).toEqual(new Set([1, 2, 3, 4, 5, 6, 7]));
+      expect(res.json.data.position).toBe(1);
+      expect(res.json.data.missingCoords).toEqual([]); // tutte le tappe della fixture hanno lat/lng ora
+      expect(res.json.data.distanceMeters).toBeGreaterThan(0);
+      expect(res.json.data.steps).toHaveLength(7);
+      expect(res.json.data.steps[0].number).toBe(res.json.data.sequence[0]);
+    });
+
+    it("PUT .../route accetta un riordino completo se la squadra non ha ancora iniziato", async () => {
+      const teamI = repo.createTeam(sessionId, "Tavolo I", "ITINIII");
+      repo.ensureTeamState(teamI.id);
+      const { generateAndAssignRoutes } = await import("../../apps/server/src/lib/itineraryPipeline");
+      generateAndAssignRoutes(sessionId, "percorso");
+
+      const before = await get(
+        `/api/control/sessions/${sessionId}/itinerary/teams/${teamI.id}/route?phaseId=percorso`,
+        "test-control-token"
+      );
+      const reversed = [...before.json.data.sequence].reverse();
+
+      const res = await put(
+        `/api/control/sessions/${sessionId}/itinerary/teams/${teamI.id}/route`,
+        { phaseId: "percorso", sequence: reversed },
+        "test-control-token"
+      );
+      expect(res.status).toBe(200);
+      expect(res.json.data.sequence).toEqual(reversed);
+
+      // Il tavolo la vede subito (state_json.route, non solo base_state_json).
+      const login = await post("/api/team/login", { accessCode: "ITINIII" }, "");
+      const token = login.json.data.token as string;
+      const status = await get("/api/team/itinerary/status", token);
+      const firstStepNumber = reversed[0];
+      const stepFromDefinition = definition.content.tappe.find((t) => t.number === firstStepNumber)!;
+      expect(status.json.data.step.title).toBe(stepFromDefinition.title);
+    });
+
+    it("PUT .../route rifiuta un percorso con tappe mancanti/duplicate", async () => {
+      const teamJ = repo.createTeam(sessionId, "Tavolo J", "ITINJJJ");
+      repo.ensureTeamState(teamJ.id);
+      const { generateAndAssignRoutes } = await import("../../apps/server/src/lib/itineraryPipeline");
+      generateAndAssignRoutes(sessionId, "percorso");
+
+      const duplicated = await put(
+        `/api/control/sessions/${sessionId}/itinerary/teams/${teamJ.id}/route`,
+        { phaseId: "percorso", sequence: [1, 1, 2, 3, 4, 5, 6] },
+        "test-control-token"
+      );
+      expect(duplicated.status).toBe(400);
+
+      const incomplete = await put(
+        `/api/control/sessions/${sessionId}/itinerary/teams/${teamJ.id}/route`,
+        { phaseId: "percorso", sequence: [1, 2, 3] },
+        "test-control-token"
+      );
+      expect(incomplete.status).toBe(400);
+    });
+
+    it("PUT .../route rifiuta un riordino che cambia l'ordine delle tappe già completate", async () => {
+      const teamK = repo.createTeam(sessionId, "Tavolo K", "ITINKKK");
+      repo.ensureTeamState(teamK.id);
+      const { generateAndAssignRoutes } = await import("../../apps/server/src/lib/itineraryPipeline");
+      generateAndAssignRoutes(sessionId, "percorso");
+
+      const login = await post("/api/team/login", { accessCode: "ITINKKK" }, "");
+      const token = login.json.data.token as string;
+
+      // "start" avanza da solo solo quando qualcuno la invia (è team.html a
+      // farlo in automatico, non il semplice GET status): qui la inviamo
+      // esplicitamente per far avanzare la squadra di una tappa.
+      const before = await get(
+        `/api/control/sessions/${sessionId}/itinerary/teams/${teamK.id}/route?phaseId=percorso`,
+        "test-control-token"
+      );
+      const firstStepId = definition.content.tappe.find((t) => t.number === before.json.data.sequence[0])!.id;
+      await post(
+        "/api/team/itinerary/submit",
+        { stepId: firstStepId, payload: {}, idempotencyKey: "flowK-start-1" },
+        token
+      );
+
+      const afterStart = await get(
+        `/api/control/sessions/${sessionId}/itinerary/teams/${teamK.id}/route?phaseId=percorso`,
+        "test-control-token"
+      );
+      expect(afterStart.json.data.position).toBe(2); // già avanzata oltre la prima tappa
+
+      const sequence = afterStart.json.data.sequence as number[];
+      // Scambia la prima tappa (già completata) con l'ultima: il prefisso già
+      // fatto cambierebbe, deve essere rifiutato.
+      const swapped = [sequence[sequence.length - 1], ...sequence.slice(1, -1), sequence[0]];
+      const rejected = await put(
+        `/api/control/sessions/${sessionId}/itinerary/teams/${teamK.id}/route`,
+        { phaseId: "percorso", sequence: swapped },
+        "test-control-token"
+      );
+      expect(rejected.status).toBe(409);
+      expect(rejected.json.error.code).toBe("route_prefix_mismatch");
+
+      // Riordinare solo le tappe ANCORA DAVANTI (tutte tranne la prima) è invece permesso.
+      const onlyFutureReordered = [sequence[0], ...sequence.slice(1).reverse()];
+      const accepted = await put(
+        `/api/control/sessions/${sessionId}/itinerary/teams/${teamK.id}/route`,
+        { phaseId: "percorso", sequence: onlyFutureReordered },
+        "test-control-token"
+      );
+      expect(accepted.status).toBe(200);
+      expect(accepted.json.data.sequence).toEqual(onlyFutureReordered);
+    });
   });
 });

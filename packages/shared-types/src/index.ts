@@ -67,6 +67,15 @@ export interface ItineraryPhaseDefinition {
   maxPhotoAttempts?: number;
   /** Punti detratti alla prima richiesta di suggerimento per tappa (default 5, spec originale: punti_suggerimento). */
   hintPenalty?: number;
+  /**
+   * Se true, la mappa del tavolo (team.html) mostra anche le tappe non
+   * ancora raggiunte (solo numero/posizione, non titolo/testo/indizio).
+   * Default false: per molte tappe (testo/guida) individuare il luogo fa
+   * parte dell'indizio, mostrarne la posizione su una mappa lo
+   * banalizzerebbe — impostazione dichiarata per singola caccia, non un
+   * toggle a runtime della regia (stesso pattern di hintPenalty sopra).
+   */
+  showUpcomingStops?: boolean;
 }
 
 /** Una singola tappa nel pool referenziato da ItineraryPhaseDefinition.stepsSource. */

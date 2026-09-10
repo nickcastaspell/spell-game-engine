@@ -202,6 +202,22 @@ CREATE TABLE IF NOT EXISTS voucher (
   used_at TEXT,
   UNIQUE(session_id, team_id, step_id)
 );
+
+-- Bozza di game definition in costruzione (Fase 3 dell'editor "città/
+-- tappe"): a differenza di game_version (immutabile una volta pubblicata,
+-- vedi repo.ts upsertGameVersion), una riga qui può essere salvata più
+-- volte mentre la regia sta ancora componendo la caccia — "publish" la
+-- trasforma in una game_version vera tramite le stesse funzioni
+-- upsertGame/upsertGameVersion usate da seed.ts, la bozza resta comunque
+-- modificabile dopo (per preparare una versione successiva).
+CREATE TABLE IF NOT EXISTS game_draft (
+  id TEXT PRIMARY KEY,
+  slug TEXT NOT NULL,
+  name TEXT NOT NULL,
+  definition_json TEXT NOT NULL,
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
 `);
 
 export function newId(prefix: string): string {

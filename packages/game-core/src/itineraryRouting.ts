@@ -52,6 +52,80 @@ export interface RouteGenerationResult {
   sequence: number[];
 }
 
+export interface GeoPoint {
+  lat: number;
+  lng: number;
+}
+
+/**
+ * Distanza approssimata in metri tra due punti geografici (formula
+ * dell'emisenoverso, raggio terrestre medio 6371 km) — precisione più che
+ * sufficiente per un percorso a piedi in città, non serve un modello
+ * geodetico più preciso. Pura, nessuna dipendenza esterna: usata sia dal
+ * modulo "geoAnswer" (packages/game-core/src/modules/geoAnswer.ts, per
+ * verificare la posizione inviata da una squadra) sia da
+ * computeRouteDistanceMeters sotto (distanza prevista di un percorso).
+ */
+export function haversineMeters(a: GeoPoint, b: GeoPoint): number {
+  const R = 6371000;
+  const toRad = (deg: number) => (deg * Math.PI) / 180;
+  const dLat = toRad(b.lat - a.lat);
+  const dLng = toRad(b.lng - a.lng);
+  const lat1 = toRad(a.lat);
+  const lat2 = toRad(b.lat);
+
+  const sinDLat = Math.sin(dLat / 2);
+  const sinDLng = Math.sin(dLng / 2);
+  const h = sinDLat * sinDLat + Math.cos(lat1) * Math.cos(lat2) * sinDLng * sinDLng;
+  return 2 * R * Math.asin(Math.min(1, Math.sqrt(h)));
+}
+
+export interface RouteDistanceResult {
+  /** Distanza totale stimata, in metri, tra tappe consecutive del percorso che hanno entrambe lat/lng. */
+  meters: number;
+  /** "number" delle tappe del percorso senza lat/lng in config — escluse dal calcolo, non fanno fallire la funzione. */
+  missingCoords: number[];
+}
+
+function stepCoords(step: ItineraryStepContent | undefined): GeoPoint | null {
+  const config = step?.config as { lat?: unknown; lng?: unknown } | undefined;
+  const lat = config?.lat;
+  const lng = config?.lng;
+  if (typeof lat !== "number" || typeof lng !== "number") return null;
+  return { lat, lng };
+}
+
+/**
+ * Distanza prevista di un percorso già generato/assegnato (spec: mostrata
+ * alla regia per squadra, packages/game-core... usato da
+ * apps/server/src/routes/control.ts). Somma le distanze tra tappe
+ * consecutive nell'ordine di "route"; una tappa senza coordinate rompe la
+ * catena in quel punto (il segmento prima/dopo di essa non viene
+ * conteggiato) invece di far fallire l'intero calcolo — utile perché una
+ * game definition può avere coordinate parziali durante l'authoring
+ * (vedi editor.html, wave successiva).
+ */
+export function computeRouteDistanceMeters(route: number[], steps: ItineraryStepContent[]): RouteDistanceResult {
+  const byNumber = new Map(steps.map((s) => [s.number, s]));
+  const missingCoords: number[] = [];
+  let meters = 0;
+  let previous: GeoPoint | null = null;
+
+  for (const num of route) {
+    const step = byNumber.get(num);
+    const point = stepCoords(step);
+    if (!point) {
+      missingCoords.push(num);
+      previous = null; // catena interrotta: non collegare il segmento successivo a un punto sconosciuto
+      continue;
+    }
+    if (previous) meters += haversineMeters(previous, point);
+    previous = point;
+  }
+
+  return { meters, missingCoords };
+}
+
 function filtraGruppi(steps: ItineraryStepContent[], teamNumber: number): ItineraryStepContent[] {
   return steps.filter((s) => {
     const g = (s.groups ?? []).map((x) => String(x).trim()).filter(Boolean);

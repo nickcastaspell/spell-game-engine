@@ -4,6 +4,8 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Regia — Spell Game Engine</title>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.css" />
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.js"></script>
   <style>
     body { font-family: system-ui, sans-serif; max-width: 900px; margin: 2rem auto; padding: 0 1rem; color: #1a1a2e; }
     h1 { font-size: 1.3rem; }
@@ -35,6 +37,7 @@
   <div id="devBanner">⚠ Development Mode — reset, duplicazione ed eliminazione sessioni sono attivi. Non sono disponibili in produzione.</div>
 
   <h1>Regia</h1>
+  <p><a href="/editor.html">✏️ Editor caccia (crea/modifica città e tappe)</a></p>
 
   <fieldset>
     <legend>Connessione</legend>
@@ -110,6 +113,12 @@
         <span id="generateRoutesResult"></span>
       </div>
 
+      <h4>Percorsi squadra</h4>
+      <div id="teamRoutesBox"><p>Genera i percorsi per vederli qui.</p></div>
+
+      <h4>Mappa squadre</h4>
+      <div id="overviewMap" style="height:320px; border-radius:8px;"></div>
+
       <h4>Facilitatori</h4>
       <div class="row">
         <input id="facilitatorName" placeholder="Nome (es. Mauro)" style="width:10rem" />
@@ -123,6 +132,18 @@
 
       <h4>Foto in attesa di approvazione</h4>
       <div id="pendingPhotos"><p>Nessuna foto in attesa.</p></div>
+
+      <h4>Galleria foto</h4>
+      <div class="row">
+        <label style="margin:0">Filtra per stato</label>
+        <select id="galleryStatusFilter">
+          <option value="">Tutte</option>
+          <option value="pending">In attesa</option>
+          <option value="approved">Approvate</option>
+          <option value="rejected">Rigettate</option>
+        </select>
+      </div>
+      <div id="photoGallery"><p>Nessuna foto.</p></div>
     </fieldset>
   </div>
 
@@ -438,6 +459,9 @@
 
       loadFacilitators();
       loadPendingPhotos();
+      loadTeamRoutes();
+      loadOverviewMap();
+      loadPhotoGallery();
     }
 
     async function generateRoutes() {
@@ -450,11 +474,213 @@
           body: JSON.stringify({ phaseId }),
         });
         resultEl.textContent = `Percorsi generati per ${res.teams.length} squadre.`;
+        loadTeamRoutes();
       } catch (e) {
         resultEl.textContent = "";
         alert(e.message);
       }
     }
+
+    // --- Percorsi squadra (Fase 4): vedere la distanza prevista e
+    // riordinare a mano le tappe non ancora raggiunte da una squadra. ---
+
+    let editingRoute = null; // { teamId, teamName, sequence, lockedCount, stepsByNumber } oppure null
+
+    async function loadTeamRoutes() {
+      // Non ridisegnare sotto le mani di chi sta modificando un percorso:
+      // stesso principio del "renderedItineraryStepId" di team.html, qui
+      // applicato al ciclo di poll di refreshDashboard (ogni 4s).
+      if (editingRoute) return;
+
+      const phaseId = document.getElementById("itineraryPhaseSelect").value;
+      const box = document.getElementById("teamRoutesBox");
+      if (!phaseId || currentDashboardTeams.length === 0) {
+        box.innerHTML = "<p>Genera i percorsi per vederli qui.</p>";
+        return;
+      }
+
+      const rows = await Promise.all(
+        currentDashboardTeams.map(async (t) => {
+          try {
+            const detail = await api(`/api/control/sessions/${sid}/itinerary/teams/${t.teamId}/route?phaseId=${phaseId}`);
+            return { team: t, detail };
+          } catch (e) {
+            return { team: t, error: e.message };
+          }
+        })
+      );
+
+      box.innerHTML = rows
+        .map(({ team, detail, error }) => {
+          if (error) return `<p><strong>${team.name}</strong>: ${error}</p>`;
+          const km = (detail.distanceMeters / 1000).toFixed(2);
+          const warn =
+            detail.missingCoords.length > 0
+              ? ` <small style="color:#b45309">(${detail.missingCoords.length} tappe senza coordinate, escluse dal calcolo)</small>`
+              : "";
+          return `
+            <div class="row" style="border-bottom:1px solid #eee; padding:0.4rem 0;">
+              <span style="min-width:10rem"><strong>${team.name}</strong></span>
+              <span>tappa ${detail.position} di ${detail.sequence.length}</span>
+              <span>~${km} km previsti${warn}</span>
+              <button class="secondary" style="width:auto" data-edit-route="${team.teamId}">Modifica percorso</button>
+            </div>`;
+        })
+        .join("");
+
+      box.querySelectorAll("[data-edit-route]").forEach((b) => {
+        b.addEventListener("click", () => startEditRoute(b.dataset.editRoute));
+      });
+    }
+
+    async function startEditRoute(teamId) {
+      const phaseId = document.getElementById("itineraryPhaseSelect").value;
+      const teamName = (currentDashboardTeams.find((t) => t.teamId === teamId) || {}).name || teamId;
+      try {
+        const detail = await api(`/api/control/sessions/${sid}/itinerary/teams/${teamId}/route?phaseId=${phaseId}`);
+        editingRoute = {
+          teamId,
+          teamName,
+          sequence: detail.sequence.slice(),
+          lockedCount: Math.max(0, detail.position - 1),
+          stepsByNumber: new Map(detail.steps.map((s) => [s.number, s])),
+        };
+        renderRouteEditor();
+      } catch (e) {
+        alert(e.message);
+      }
+    }
+
+    function renderRouteEditor() {
+      const box = document.getElementById("teamRoutesBox");
+      const { teamName, sequence, lockedCount, stepsByNumber } = editingRoute;
+
+      const items = sequence
+        .map((number, idx) => {
+          const step = stepsByNumber.get(number);
+          const locked = idx < lockedCount;
+          const title = step ? step.title : `Tappa ${number}`;
+          const moveButtons = locked
+            ? ""
+            : `
+              <button class="secondary" style="width:auto" data-move="up" data-idx="${idx}" ${idx <= lockedCount ? "disabled" : ""}>↑</button>
+              <button class="secondary" style="width:auto" data-move="down" data-idx="${idx}" ${idx >= sequence.length - 1 ? "disabled" : ""}>↓</button>`;
+          return `<li style="${locked ? "opacity:0.5" : ""}">${title}${locked ? " <small>(già completata)</small>" : ""} ${moveButtons}</li>`;
+        })
+        .join("");
+
+      box.innerHTML = `
+        <div style="border:1px solid #ddd; border-radius:6px; padding:0.75rem;">
+          <p><strong>Modifica percorso — ${teamName}</strong></p>
+          <p><small>Le tappe già completate (in grigio) non si possono spostare — solo quelle ancora davanti alla squadra.</small></p>
+          <ol>${items}</ol>
+          <button id="saveRouteBtn">Salva percorso</button>
+          <button id="cancelRouteBtn" class="secondary">Annulla</button>
+          <p id="routeEditErr" style="color:#b91c1c"></p>
+        </div>`;
+
+      box.querySelectorAll("[data-move]").forEach((b) => {
+        b.addEventListener("click", () => {
+          const idx = Number(b.dataset.idx);
+          const delta = b.dataset.move === "up" ? -1 : 1;
+          const target = idx + delta;
+          if (target < editingRoute.lockedCount || target >= editingRoute.sequence.length) return;
+          const seq = editingRoute.sequence;
+          [seq[idx], seq[target]] = [seq[target], seq[idx]];
+          renderRouteEditor();
+        });
+      });
+      document.getElementById("saveRouteBtn").addEventListener("click", saveRouteEdit);
+      document.getElementById("cancelRouteBtn").addEventListener("click", () => {
+        editingRoute = null;
+        loadTeamRoutes();
+      });
+    }
+
+    async function saveRouteEdit() {
+      const phaseId = document.getElementById("itineraryPhaseSelect").value;
+      try {
+        await api(`/api/control/sessions/${sid}/itinerary/teams/${editingRoute.teamId}/route`, {
+          method: "PUT",
+          body: JSON.stringify({ phaseId, sequence: editingRoute.sequence }),
+        });
+        editingRoute = null;
+        loadTeamRoutes();
+      } catch (e) {
+        document.getElementById("routeEditErr").textContent = e.message;
+      }
+    }
+
+    // --- Mappa overview squadre (Fase 6): dove sono ADESSO, solo tappa
+    // corrente — non l'intero percorso (non deve spoilerare le altre
+    // squadre le une con le altre). Ricaricata nello stesso ciclo di
+    // refreshDashboard (già a 4s), nessun polling nuovo. ---
+
+    let overviewMap = null;
+    let overviewMarkersLayer = null;
+
+    async function loadOverviewMap() {
+      const phaseId = document.getElementById("itineraryPhaseSelect").value;
+      if (!phaseId) return;
+      let entries;
+      try {
+        entries = await api(`/api/control/sessions/${sid}/itinerary/overview?phaseId=${phaseId}`);
+      } catch (e) {
+        return; // sessione non ancora pronta / token non valido: ignora, come loadFacilitators
+      }
+
+      const withCoords = entries.filter((e) => e.currentStep && e.currentStep.lat !== null && e.currentStep.lng !== null);
+      if (withCoords.length === 0) return;
+
+      if (!overviewMap) {
+        overviewMap = L.map("overviewMap");
+        L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", { attribution: "© OpenStreetMap" }).addTo(overviewMap);
+      }
+      if (overviewMarkersLayer) overviewMap.removeLayer(overviewMarkersLayer);
+      overviewMarkersLayer = L.layerGroup();
+
+      withCoords.forEach((e) => {
+        const marker = L.marker([e.currentStep.lat, e.currentStep.lng]);
+        marker.bindTooltip(`<strong>${e.teamName}</strong><br/>${e.currentStep.title}`, { permanent: false });
+        marker.addTo(overviewMarkersLayer);
+      });
+      overviewMarkersLayer.addTo(overviewMap);
+      overviewMap.fitBounds(withCoords.map((e) => [e.currentStep.lat, e.currentStep.lng]), { padding: [30, 30], maxZoom: 16 });
+    }
+
+    // --- Galleria foto (Fase 6): tutte le foto della sessione, non solo
+    // quelle in attesa — il pannello "Foto in attesa" sopra resta com'è
+    // (operativo per approvare/rigettare), questa è una vista aggiuntiva
+    // di sola lettura con filtro per stato. ---
+
+    async function loadPhotoGallery() {
+      const status = document.getElementById("galleryStatusFilter").value;
+      const box = document.getElementById("photoGallery");
+      try {
+        const qs = status ? `?status=${status}` : "";
+        const photos = await api(`/api/control/sessions/${sid}/itinerary/photos${qs}`);
+        if (photos.length === 0) {
+          box.innerHTML = "<p>Nessuna foto.</p>";
+          return;
+        }
+        const statusLabel = { pending: "in attesa", approved: "approvata", rejected: "rigettata" };
+        box.innerHTML = `<div class="row">${photos
+          .map(
+            (p) => `
+          <div style="width:8rem">
+            <img src="/api/control/sessions/${sid}/itinerary/photos/${p.id}/image" alt="foto"
+                 style="width:8rem; height:8rem; object-fit:cover; border-radius:6px; border:1px solid #ddd"
+                 onerror="this.style.display='none'" />
+            <p style="font-size:0.75rem; margin:0.2rem 0 0"><strong>${p.teamName}</strong><br/>${statusLabel[p.status] ?? p.status} (tentativo ${p.attempt})</p>
+          </div>`
+          )
+          .join("")}</div>`;
+      } catch (e) {
+        box.innerHTML = `<p id="err">${e.message}</p>`;
+      }
+    }
+
+    document.getElementById("galleryStatusFilter").addEventListener("change", loadPhotoGallery);
 
     async function loadFacilitators() {
       try {

@@ -1,5 +1,11 @@
 import { describe, it, expect } from "vitest";
-import { generateItineraryRoutes, stepConstraintKind, type RouteGenerationTeam } from "../../packages/game-core/src/itineraryRouting";
+import {
+  generateItineraryRoutes,
+  stepConstraintKind,
+  haversineMeters,
+  computeRouteDistanceMeters,
+  type RouteGenerationTeam,
+} from "../../packages/game-core/src/itineraryRouting";
 import type { ItineraryStepContent } from "../../packages/shared-types/src/index";
 
 // Set di tappe sintetico ma realistico: blocchi 1/2/3 con 3 tappe ciascuno
@@ -125,5 +131,49 @@ describe("generateItineraryRoutes", () => {
     const single = generateItineraryRoutes(steps, [{ id: "solo", index: 0 }], { minGuideDistance: 2 });
     expect(single.length).toBe(1);
     expect(single[0].sequence.length).toBe(steps.length);
+  });
+});
+
+describe("haversineMeters / computeRouteDistanceMeters", () => {
+  it("calcola la distanza tra due punti sullo stesso meridiano (caso verificabile a mano)", () => {
+    // 0.001° di latitudine ≈ R * (0.001° in radianti) = 6371000 * 0.001*π/180
+    // ≈ 111.195 m — con dLng = 0 la formula dell'emisenoverso si riduce
+    // esattamente a questo (nessuna approssimazione aggiuntiva).
+    const a = { lat: 44.4939, lng: 11.3427 };
+    const b = { lat: 44.4949, lng: 11.3427 };
+    expect(haversineMeters(a, b)).toBeCloseTo(111.2, 0);
+  });
+
+  it("è simmetrica e nulla per lo stesso punto", () => {
+    const a = { lat: 44.4939, lng: 11.3427 };
+    const b = { lat: 44.5049, lng: 11.36 };
+    expect(haversineMeters(a, a)).toBe(0);
+    expect(haversineMeters(a, b)).toBeCloseTo(haversineMeters(b, a), 6);
+  });
+
+  const tappeConCoordinate: ItineraryStepContent[] = [
+    { id: "p1", number: 1, type: "start", title: "p1", body: "", config: { lat: 44.4939, lng: 11.3427 }, points: 0 },
+    { id: "p2", number: 2, type: "textMatch", title: "p2", body: "", config: { lat: 44.4949, lng: 11.3427 }, points: 0 },
+    { id: "p3", number: 3, type: "textMatch", title: "p3", body: "", config: {}, points: 0 }, // senza lat/lng
+    { id: "p4", number: 4, type: "finale", title: "p4", body: "", config: { lat: 44.4959, lng: 11.3427 }, points: 0 },
+  ];
+
+  it("somma le distanze tra tappe consecutive nell'ordine del percorso", () => {
+    const result = computeRouteDistanceMeters([1, 2], tappeConCoordinate);
+    expect(result.meters).toBeCloseTo(111.2, 0);
+    expect(result.missingCoords).toEqual([]);
+  });
+
+  it("una tappa senza coordinate viene esclusa e interrompe la catena, senza far fallire il calcolo", () => {
+    const result = computeRouteDistanceMeters([1, 2, 3, 4], tappeConCoordinate);
+    // Conta solo il segmento 1->2 (111.2m): il segmento con "p3" (senza
+    // coordinate) non è calcolabile né prima né dopo di essa.
+    expect(result.meters).toBeCloseTo(111.2, 0);
+    expect(result.missingCoords).toEqual([3]);
+  });
+
+  it("un percorso vuoto o con un solo punto dà distanza zero", () => {
+    expect(computeRouteDistanceMeters([], tappeConCoordinate).meters).toBe(0);
+    expect(computeRouteDistanceMeters([1], tappeConCoordinate).meters).toBe(0);
   });
 });

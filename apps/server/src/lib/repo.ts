@@ -149,6 +149,50 @@ export function getGameVersionById(id: string): GameVersionRow | undefined {
   return db.prepare("SELECT * FROM game_version WHERE id = ?").get(id) as unknown as GameVersionRow;
 }
 
+// --- game_draft (Fase 3: editor "città/tappe" dalla regia) ---
+
+export interface GameDraftRow {
+  id: string;
+  slug: string;
+  name: string;
+  definition_json: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export function createGameDraft(slug: string, name: string, definitionJson: string): GameDraftRow {
+  const id = newId("draft");
+  db.prepare("INSERT INTO game_draft (id, slug, name, definition_json) VALUES (?, ?, ?, ?)").run(
+    id,
+    slug,
+    name,
+    definitionJson
+  );
+  return getGameDraft(id)!;
+}
+
+export function getGameDraft(id: string): GameDraftRow | undefined {
+  return db.prepare("SELECT * FROM game_draft WHERE id = ?").get(id) as unknown as GameDraftRow | undefined;
+}
+
+export function listGameDrafts(): GameDraftRow[] {
+  return db.prepare("SELECT * FROM game_draft ORDER BY updated_at DESC").all() as unknown as GameDraftRow[];
+}
+
+export function updateGameDraft(id: string, definitionJson: string, name: string): GameDraftRow | undefined {
+  db.prepare("UPDATE game_draft SET definition_json = ?, name = ?, updated_at = datetime('now') WHERE id = ?").run(
+    definitionJson,
+    name,
+    id
+  );
+  return getGameDraft(id);
+}
+
+export function deleteGameDraft(id: string): boolean {
+  const result = db.prepare("DELETE FROM game_draft WHERE id = ?").run(id);
+  return result.changes === 1;
+}
+
 // --- session ---
 
 export function createSession(gameVersionId: string, name: string): SessionRow {
@@ -290,6 +334,32 @@ export function updateTeamStateWithVersionCheck(
       "UPDATE team_state SET state_json = ?, version = version + 1, updated_at = datetime('now') WHERE team_id = ? AND version = ?"
     )
     .run(newStateJson, teamId, expectedVersion);
+  return result.changes === 1;
+}
+
+/**
+ * Sovrascrive la route di una squadra (fasi itinerary — override manuale
+ * della regia, spec Fase 4) su ENTRAMBE le colonne: `base_state_json`
+ * (fonte che survive a "Reset Sessione", stessa convenzione di
+ * generateAndAssignRoutes) e `state_json.route` (copia mutabile da cui
+ * resolveCurrentStep legge davvero, itineraryPipeline.ts) — altrimenti il
+ * nuovo percorso non avrebbe effetto finché il tavolo non viene
+ * resettato. A differenza di setBaseState (pensata per PRIMA che il
+ * tavolo giochi, nessun locking), questa può essere chiamata a partita in
+ * corso: stesso optimistic locking di updateTeamStateWithVersionCheck,
+ * sulla stessa colonna `version` — le due funzioni sono quindi mutuamente
+ * consistenti anche se una submission e un cambio di percorso arrivano in
+ * concorrenza.
+ */
+export function setTeamRouteWithVersionCheck(teamId: string, expectedVersion: number, route: number[]): boolean {
+  const current = getTeamState(teamId);
+  if (!current) return false;
+  const mergedState = { ...JSON.parse(current.state_json), route };
+  const result = db
+    .prepare(
+      "UPDATE team_state SET base_state_json = ?, state_json = ?, version = version + 1, updated_at = datetime('now') WHERE team_id = ? AND version = ?"
+    )
+    .run(JSON.stringify({ route }), JSON.stringify(mergedState), teamId, expectedVersion);
   return result.changes === 1;
 }
 
@@ -703,6 +773,23 @@ export function listPendingPhotos(sessionId: string, teamIds?: string[]): Itiner
   }
   return db
     .prepare("SELECT * FROM itinerary_photo WHERE session_id = ? AND status = 'pending' ORDER BY created_at ASC")
+    .all(sessionId) as unknown as ItineraryPhotoRow[];
+}
+
+/**
+ * Variante di listPendingPhotos senza il filtro fisso su "pending" (Fase
+ * 6: galleria foto in regia — tutte le foto della sessione, non solo
+ * quelle ancora da decidere). `status` opzionale filtra su un singolo
+ * stato ("pending"/"approved"/"rejected"); omesso, restituisce tutte.
+ */
+export function listPhotosForSession(sessionId: string, status?: string): ItineraryPhotoRow[] {
+  if (status) {
+    return db
+      .prepare("SELECT * FROM itinerary_photo WHERE session_id = ? AND status = ? ORDER BY created_at DESC")
+      .all(sessionId, status) as unknown as ItineraryPhotoRow[];
+  }
+  return db
+    .prepare("SELECT * FROM itinerary_photo WHERE session_id = ? ORDER BY created_at DESC")
     .all(sessionId) as unknown as ItineraryPhotoRow[];
 }
 

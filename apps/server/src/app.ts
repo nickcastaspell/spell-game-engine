@@ -6,6 +6,7 @@ import express from "express";
 import path from "node:path";
 import { requestIdMiddleware, sendErr } from "./lib/response";
 import { controlRouter } from "./routes/control";
+import { authoringRouter } from "./routes/authoring";
 import { teamRouter } from "./routes/team";
 import { facilitatorRouter } from "./routes/facilitator";
 import { devRouter } from "./routes/dev";
@@ -19,6 +20,7 @@ export function createApp() {
   app.use(requestIdMiddleware);
 
   app.use("/api/control", controlRouter);
+  app.use("/api/control", authoringRouter);
   app.use("/api/team", teamRouter);
   app.use("/api/facilitator", facilitatorRouter);
 

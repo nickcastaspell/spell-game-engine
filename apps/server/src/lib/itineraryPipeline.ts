@@ -1,4 +1,4 @@
-import { computeSubmissionOutcome, canAcceptSubmissions, generateItineraryRoutes } from "@spell/game-core";
+import { computeSubmissionOutcome, canAcceptSubmissions, generateItineraryRoutes, computeRouteDistanceMeters } from "@spell/game-core";
 import { Effect, GameDefinition, ItineraryStepContent, ModuleContext, PhaseDefinition } from "@spell/shared-types";
 import { moduleRegistry } from "../modules-registry";
 import { ApiError } from "./response";
@@ -27,6 +27,7 @@ import {
   getTeam,
   listTeams,
   setBaseState,
+  setTeamRouteWithVersionCheck,
   updateTeamStateWithVersionCheck,
 } from "./repo";
 
@@ -94,6 +95,50 @@ function buildModuleContext(
 }
 
 /** Stato itinerario di una squadra, per l'endpoint GET (routes/itinerary.ts). */
+export interface ItineraryRouteViewEntry {
+  number: number;
+  status: "done" | "current" | "upcoming";
+  lat: number | null;
+  lng: number | null;
+  title?: string;
+}
+
+/**
+ * Vista del percorso per la MAPPA DEL TAVOLO (Fase 5) — diversa da
+ * getTeamRouteDetail (Fase 4, uso regia: vede tutto, serve a riordinare).
+ * Le tappe non ancora raggiunte non espongono titolo né coordinate, salvo
+ * che la caccia dichiari esplicitamente itinerary.showUpcomingStops:
+ * individuare il luogo di una tappa fa parte dell'indizio per molti tipi
+ * (textMatch "testo"/"guida"), mostrarne la posizione in anticipo su una
+ * mappa lo banalizzerebbe.
+ */
+function resolveRouteView(
+  steps: ItineraryStepContent[],
+  route: number[],
+  position: number,
+  showUpcomingStops: boolean
+): ItineraryRouteViewEntry[] {
+  const byNumber = new Map(steps.map((s) => [s.number, s]));
+  return route.map((number, idx) => {
+    const status: ItineraryRouteViewEntry["status"] =
+      idx < position - 1 ? "done" : idx === position - 1 ? "current" : "upcoming";
+
+    if (status === "upcoming" && !showUpcomingStops) {
+      return { number, status, lat: null, lng: null };
+    }
+
+    const step = byNumber.get(number);
+    const config = step?.config as { lat?: unknown; lng?: unknown } | undefined;
+    return {
+      number,
+      status,
+      lat: typeof config?.lat === "number" ? config.lat : null,
+      lng: typeof config?.lng === "number" ? config.lng : null,
+      title: step?.title,
+    };
+  });
+}
+
 export function getItineraryStatus(sessionId: string, teamId: string, phaseId: string) {
   const session = getSession(sessionId);
   if (!session) throw new ApiError(404, "session_not_found", "Sessione non trovata");
@@ -104,12 +149,15 @@ export function getItineraryStatus(sessionId: string, teamId: string, phaseId: s
   if (phase.mode !== "itinerary") {
     throw new ApiError(400, "not_itinerary_phase", `La fase "${phaseId}" non è di tipo itinerary`);
   }
+  const itinerary = requireItinerary(phase);
+  const steps = (definition.content[itinerary.stepsSource] as ItineraryStepContent[] | undefined) ?? [];
 
   const teamStateRow = ensureTeamState(teamId);
   const state = parseState(teamStateRow.state_json);
   const route = Array.isArray(state.route) ? (state.route as number[]) : [];
   const position = typeof state.position === "number" ? state.position : 1;
   const step = resolveCurrentStep(definition, phase, state);
+  const routeView = resolveRouteView(steps, route, position, itinerary.showUpcomingStops ?? false);
 
   // Il traguardo ("finale") non emette itinerary.advance — non c'è una
   // tappa successiva, quindi position non supera mai route.length da sola
@@ -127,6 +175,7 @@ export function getItineraryStatus(sessionId: string, teamId: string, phaseId: s
       totalSteps: route.length,
       score: typeof state.score === "number" ? state.score : 0,
       step: null,
+      route: routeView,
     };
   }
 
@@ -147,6 +196,7 @@ export function getItineraryStatus(sessionId: string, teamId: string, phaseId: s
       view,
       hasHint: Boolean(step.hint) && !hintsUsed[step.id],
     },
+    route: routeView,
   };
 }
 
@@ -482,19 +532,14 @@ export function decideItineraryPhoto(params: {
 
 
 /**
- * Genera e assegna il percorso di ciascuna squadra della sessione per
- * questa fase itinerary (spec: generaPercorsi dell'originale Apps
- * Script — vincolaGuide/spaziGuide/rotazione a blocchi in coppia, ora
- * portati in packages/game-core/src/itineraryRouting.ts). Va chiamata
- * dalla regia PRIMA di aprire la fase alle squadre: scrive il percorso
- * in base_state_json (setBaseState), così sopravvive a "Reset Sessione"
- * (strumento DEV — la route è dato di setup, non stato di gioco) e resta
- * la fonte da cui resolveCurrentStep legge la sequenza.
+ * Carica definizione/fase/tappe di una fase itinerary per una sessione —
+ * stesso blocco ripetuto identico in generateAndAssignRoutes,
+ * getTeamRouteDetail e setTeamRoute sotto, fattorizzato qui.
  */
-export function generateAndAssignRoutes(
+function loadItineraryStepsForPhase(
   sessionId: string,
   phaseId: string
-): { teamId: string; stepsCount: number }[] {
+): { definition: GameDefinition; phase: PhaseDefinition; steps: ItineraryStepContent[] } {
   const session = getSession(sessionId);
   if (!session) throw new ApiError(404, "session_not_found", "Sessione non trovata");
 
@@ -508,6 +553,25 @@ export function generateAndAssignRoutes(
   if (steps.length === 0) {
     throw new ApiError(500, "steps_missing", `content["${itinerary.stepsSource}"] è vuoto o mancante`);
   }
+  return { definition, phase, steps };
+}
+
+/**
+ * Genera e assegna il percorso di ciascuna squadra della sessione per
+ * questa fase itinerary (spec: generaPercorsi dell'originale Apps
+ * Script — vincolaGuide/spaziGuide/rotazione a blocchi in coppia, ora
+ * portati in packages/game-core/src/itineraryRouting.ts). Va chiamata
+ * dalla regia PRIMA di aprire la fase alle squadre: scrive il percorso
+ * in base_state_json (setBaseState), così sopravvive a "Reset Sessione"
+ * (strumento DEV — la route è dato di setup, non stato di gioco) e resta
+ * la fonte da cui resolveCurrentStep legge la sequenza.
+ */
+export function generateAndAssignRoutes(
+  sessionId: string,
+  phaseId: string
+): { teamId: string; stepsCount: number }[] {
+  const { phase, steps } = loadItineraryStepsForPhase(sessionId, phaseId);
+  const itinerary = requireItinerary(phase);
 
   const teams = listTeams(sessionId);
   if (teams.length === 0) {
@@ -536,4 +600,171 @@ export function generateAndAssignRoutes(
   });
 
   return results.map((r) => ({ teamId: r.teamId, stepsCount: r.sequence.length }));
+}
+
+function requireTeamInSession(sessionId: string, teamId: string) {
+  const team = getTeam(teamId);
+  if (!team || team.session_id !== sessionId) {
+    throw new ApiError(404, "team_not_found", "Squadra non trovata in questa sessione");
+  }
+  return team;
+}
+
+export interface TeamRouteStepDetail {
+  number: number;
+  title: string | null;
+  lat: number | null;
+  lng: number | null;
+}
+
+export interface TeamRouteDetail {
+  sequence: number[];
+  /** Posizione corrente (1-based) della squadra dentro sequence — le tappe con indice < position-1 sono già state completate. */
+  position: number;
+  steps: TeamRouteStepDetail[];
+  distanceMeters: number;
+  missingCoords: number[];
+  stateVersion: number;
+}
+
+/**
+ * Percorso assegnato a una squadra + distanza prevista (Fase 4: la regia
+ * vuole vedere/riordinare i percorsi individuali, non solo generarli in
+ * blocco). Sola lettura: nessuna scrittura, usa direttamente
+ * team_state.state_json (route + position), la stessa fonte di
+ * resolveCurrentStep.
+ */
+export function getTeamRouteDetail(sessionId: string, phaseId: string, teamId: string): TeamRouteDetail {
+  requireTeamInSession(sessionId, teamId);
+  const { steps } = loadItineraryStepsForPhase(sessionId, phaseId);
+  const stepsByNumber = new Map(steps.map((s) => [s.number, s]));
+
+  const teamStateRow = ensureTeamState(teamId);
+  const state = parseState(teamStateRow.state_json);
+  const sequence = Array.isArray(state.route) ? (state.route as number[]) : [];
+  const position = typeof state.position === "number" ? state.position : 1;
+
+  const stepsDetail: TeamRouteStepDetail[] = sequence.map((number) => {
+    const step = stepsByNumber.get(number);
+    const config = step?.config as { lat?: unknown; lng?: unknown } | undefined;
+    return {
+      number,
+      title: step?.title ?? null,
+      lat: typeof config?.lat === "number" ? config.lat : null,
+      lng: typeof config?.lng === "number" ? config.lng : null,
+    };
+  });
+
+  const { meters, missingCoords } = computeRouteDistanceMeters(sequence, steps);
+
+  return { sequence, position, steps: stepsDetail, distanceMeters: meters, missingCoords, stateVersion: teamStateRow.version };
+}
+
+/**
+ * Override manuale del percorso di una squadra (Fase 4). A differenza di
+ * generateAndAssignRoutes, pensata per essere chiamata PRIMA di aprire la
+ * fase, questa può essere usata anche a partita in corso — ma non
+ * permette di riscrivere le tappe che la squadra ha già superato
+ * (`sequence` deve avere lo stesso prefisso di quelle già completate):
+ * la regia può solo riordinare le tappe non ancora raggiunte, non
+ * "disfare" ciò che è già successo. Errore esplicito (409) se il prefisso
+ * non corrisponde, invece di applicare silenziosamente un percorso che
+ * farebbe ripetere o saltare tappe già giocate.
+ */
+export function setTeamRoute(sessionId: string, phaseId: string, teamId: string, sequence: number[]): TeamRouteDetail {
+  requireTeamInSession(sessionId, teamId);
+  const { steps } = loadItineraryStepsForPhase(sessionId, phaseId);
+
+  const expectedNumbers = new Set(steps.map((s) => s.number));
+  const seen = new Set<number>();
+  for (const n of sequence) {
+    if (!expectedNumbers.has(n)) {
+      throw new ApiError(400, "invalid_route", `Numero tappa "${n}" non esiste in questa game definition`);
+    }
+    if (seen.has(n)) {
+      throw new ApiError(400, "invalid_route", `Numero tappa "${n}" ripetuto nel percorso`);
+    }
+    seen.add(n);
+  }
+  if (seen.size !== expectedNumbers.size) {
+    throw new ApiError(400, "invalid_route", "Il percorso deve contenere ogni tappa esattamente una volta");
+  }
+
+  const teamStateRow = ensureTeamState(teamId);
+  const state = parseState(teamStateRow.state_json);
+  const oldSequence = Array.isArray(state.route) ? (state.route as number[]) : [];
+  const position = typeof state.position === "number" ? state.position : 1;
+  const doneCount = Math.max(0, position - 1);
+
+  const oldPrefix = oldSequence.slice(0, doneCount);
+  const newPrefix = sequence.slice(0, doneCount);
+  if (JSON.stringify(oldPrefix) !== JSON.stringify(newPrefix)) {
+    throw new ApiError(
+      409,
+      "route_prefix_mismatch",
+      "Non è possibile cambiare l'ordine delle tappe che la squadra ha già completato — solo quelle davanti a lei"
+    );
+  }
+
+  const ok = setTeamRouteWithVersionCheck(teamId, teamStateRow.version, sequence);
+  if (!ok) throw new ApiError(409, "state_conflict", "team_state modificato concorrentemente, riprovare");
+
+  createAuditEvent({
+    actorType: "control",
+    actorId: "regia",
+    sessionId,
+    action: "itinerary.route_overridden",
+    payloadJson: JSON.stringify({ teamId, sequence }),
+  });
+
+  return getTeamRouteDetail(sessionId, phaseId, teamId);
+}
+
+export interface ItineraryTeamOverviewEntry {
+  teamId: string;
+  teamName: string;
+  position: number;
+  totalSteps: number;
+  completed: boolean;
+  currentStep: { number: number; title: string; lat: number | null; lng: number | null } | null;
+}
+
+/**
+ * Overview per la regia (Fase 6: dove sono le squadre adesso) — solo la
+ * tappa CORRENTE di ciascuna squadra, non l'intero percorso: a differenza
+ * di getTeamRouteDetail (Fase 4, uno sguardo mirato su una squadra per
+ * riordinarne il percorso), questa è pensata per una mappa con tutte le
+ * squadre insieme e non deve spoilerare il percorso altrui.
+ */
+export function getItineraryOverview(sessionId: string, phaseId: string): ItineraryTeamOverviewEntry[] {
+  const { steps } = loadItineraryStepsForPhase(sessionId, phaseId);
+  const stepsByNumber = new Map(steps.map((s) => [s.number, s]));
+  const teams = listTeams(sessionId);
+
+  return teams.map((team) => {
+    const teamStateRow = ensureTeamState(team.id);
+    const state = parseState(teamStateRow.state_json);
+    const route = Array.isArray(state.route) ? (state.route as number[]) : [];
+    const position = typeof state.position === "number" ? state.position : 1;
+    const completed = typeof state.itineraryCompletedAt === "string";
+    const currentNumber = completed ? undefined : route[position - 1];
+    const currentStepDef = currentNumber !== undefined ? stepsByNumber.get(currentNumber) : undefined;
+    const config = currentStepDef?.config as { lat?: unknown; lng?: unknown } | undefined;
+
+    return {
+      teamId: team.id,
+      teamName: team.name,
+      position,
+      totalSteps: route.length,
+      completed,
+      currentStep: currentStepDef
+        ? {
+            number: currentStepDef.number,
+            title: currentStepDef.title,
+            lat: typeof config?.lat === "number" ? config.lat : null,
+            lng: typeof config?.lng === "number" ? config.lng : null,
+          }
+        : null,
+    };
+  });
 }

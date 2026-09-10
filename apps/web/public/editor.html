@@ -1,0 +1,410 @@
+<!doctype html>
+<html lang="it">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Editor caccia — Spell Game Engine</title>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.css" />
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.js"></script>
+  <style>
+    body { font-family: system-ui, sans-serif; max-width: 960px; margin: 2rem auto; padding: 0 1rem; color: #1a1a2e; }
+    h1 { font-size: 1.3rem; }
+    h4 { margin-bottom: 0.3rem; }
+    fieldset { border: 1px solid #ddd; border-radius: 8px; margin: 1rem 0; }
+    label { display: block; font-size: 0.85rem; color: #555; margin-top: 0.5rem; }
+    input, select, textarea, button { font-size: 0.95rem; padding: 0.5rem; margin: 0.2rem 0.2rem 0.2rem 0; border-radius: 6px; border: 1px solid #ccc; }
+    textarea { width: 100%; box-sizing: border-box; font-family: inherit; }
+    button { background: #4338ca; color: white; border: none; cursor: pointer; font-weight: 600; }
+    button.secondary { background: #6b7280; }
+    button.danger { background: #b91c1c; }
+    .row { display: flex; gap: 0.5rem; flex-wrap: wrap; align-items: center; }
+    #err { color: #b91c1c; }
+    .tappa-card { border: 1px solid #ddd; border-radius: 8px; padding: 0.75rem; margin-bottom: 0.75rem; background: #fafafa; }
+    .tappa-card.picking { border-color: #4338ca; box-shadow: 0 0 0 2px #4338ca33; }
+    .tappa-card .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(9rem, 1fr)); gap: 0.5rem; }
+    .tappa-card .grid label { margin-top: 0; }
+    .tappa-card .grid input, .tappa-card .grid select { width: 100%; box-sizing: border-box; }
+    #map { height: 320px; border-radius: 8px; margin-top: 0.5rem; }
+    small.hint { color: #666; display: block; margin-top: 0.3rem; }
+  </style>
+</head>
+<body>
+  <h1>Editor caccia <small style="font-size:0.7rem; color:#666">(percorso per squadra — es. "Il mistero della città")</small></h1>
+  <p><a href="/index.html">← Torna alla home</a> · <a href="/control.html">Regia</a></p>
+
+  <fieldset>
+    <legend>Connessione</legend>
+    <label>Token regia</label>
+    <input id="token" placeholder="nick" />
+  </fieldset>
+
+  <fieldset>
+    <legend>Bozze</legend>
+    <div id="draftsList"><p>Caricamento…</p></div>
+
+    <h4>Nuova bozza</h4>
+    <div class="row">
+      <div><label>Slug (id univoco, es. "mistero-milano")</label><input id="newSlug" /></div>
+      <div><label>Nome città/caccia</label><input id="newName" /></div>
+      <div><label>Parti da (slug di un gioco già pubblicato, opzionale)</label><input id="newBasedOn" placeholder="il-mistero-della-citta" /></div>
+      <button id="createDraftBtn" style="align-self:flex-end">Crea bozza</button>
+    </div>
+    <p id="createErr" style="color:#b91c1c"></p>
+  </fieldset>
+
+  <fieldset id="draftEditor" style="display:none">
+    <legend>Modifica bozza — <span id="editingName"></span></legend>
+
+    <label>Nome città/caccia</label>
+    <input id="draftName" />
+
+    <h4>Tappe</h4>
+    <p><small class="hint">Clicca "📍 Imposta su mappa" su una tappa, poi clicca un punto sulla mappa qui sotto per impostarne lat/lng.</small></p>
+    <div id="tappeList"></div>
+    <button id="addTappaBtn" class="secondary">+ Aggiungi tappa</button>
+
+    <div id="map"></div>
+
+    <div class="row" style="margin-top:1rem">
+      <button id="saveDraftBtn">Salva bozza</button>
+      <button id="publishDraftBtn" class="secondary">Pubblica</button>
+      <button id="deleteDraftBtn" class="danger">Elimina bozza</button>
+    </div>
+    <p id="editorErr" style="color:#b91c1c"></p>
+    <p id="editorOk" style="color:#15803d"></p>
+  </fieldset>
+
+  <script>
+    const STEP_TYPES = ["start", "textMatch", "photoApproval", "voucher", "geoAnswer", "finale"];
+
+    function token() {
+      return document.getElementById("token").value.trim();
+    }
+
+    async function api(path, opts = {}) {
+      const res = await fetch(path, {
+        ...opts,
+        headers: { "Content-Type": "application/json", Authorization: "Bearer " + token(), ...(opts.headers || {}) },
+      });
+      const body = await res.json();
+      if (!res.ok || !body.ok) throw new Error(body.error?.message || "Errore");
+      return body.data;
+    }
+
+    let currentDraft = null; // { id, slug, name, definition } della bozza aperta
+    let pickingForIdx = null; // indice della tappa in attesa di un click sulla mappa
+    let map = null;
+    let mapMarkers = [];
+
+    async function loadDrafts() {
+      const box = document.getElementById("draftsList");
+      try {
+        const drafts = await api("/api/control/game-drafts");
+        if (drafts.length === 0) {
+          box.innerHTML = "<p>Nessuna bozza. Creane una qui sotto.</p>";
+          return;
+        }
+        box.innerHTML = drafts
+          .map(
+            (d) => `
+          <div class="row" style="border-bottom:1px solid #eee; padding:0.4rem 0;">
+            <span style="min-width:14rem"><strong>${d.name}</strong> <small>(${d.slug})</small></span>
+            <span><small>${d.definition.content.tappe.length} tappe</small></span>
+            <button data-open-draft="${d.id}">Apri</button>
+          </div>`
+          )
+          .join("");
+        box.querySelectorAll("[data-open-draft]").forEach((b) => {
+          b.addEventListener("click", () => openDraft(b.dataset.openDraft));
+        });
+      } catch (e) {
+        box.innerHTML = `<p id="err">${e.message}</p>`;
+      }
+    }
+
+    async function createDraft() {
+      const slug = document.getElementById("newSlug").value.trim();
+      const name = document.getElementById("newName").value.trim();
+      const basedOn = document.getElementById("newBasedOn").value.trim();
+      const errEl = document.getElementById("createErr");
+      errEl.textContent = "";
+      if (!slug || !name) {
+        errEl.textContent = "Slug e nome sono obbligatori.";
+        return;
+      }
+      try {
+        const draft = await api("/api/control/game-drafts", {
+          method: "POST",
+          body: JSON.stringify({ slug, name, ...(basedOn ? { basedOn } : {}) }),
+        });
+        document.getElementById("newSlug").value = "";
+        document.getElementById("newName").value = "";
+        document.getElementById("newBasedOn").value = "";
+        await loadDrafts();
+        openDraftData(draft);
+      } catch (e) {
+        errEl.textContent = e.message;
+      }
+    }
+
+    async function openDraft(id) {
+      try {
+        const draft = await api(`/api/control/game-drafts/${id}`);
+        openDraftData(draft);
+      } catch (e) {
+        alert(e.message);
+      }
+    }
+
+    function openDraftData(draft) {
+      currentDraft = draft;
+      pickingForIdx = null;
+      document.getElementById("draftEditor").style.display = "block";
+      document.getElementById("editingName").textContent = `${draft.name} (${draft.slug})`;
+      document.getElementById("draftName").value = draft.name;
+      document.getElementById("editorErr").textContent = "";
+      document.getElementById("editorOk").textContent = "";
+      renderTappe();
+      initMap();
+    }
+
+    function nextTappaNumber() {
+      const numbers = currentDraft.definition.content.tappe.map((t) => t.number);
+      return numbers.length === 0 ? 1 : Math.max(...numbers) + 1;
+    }
+
+    function addTappa() {
+      currentDraft.definition.content.tappe.push({
+        id: `tappa-${nextTappaNumber()}`,
+        number: nextTappaNumber(),
+        type: "textMatch",
+        title: "",
+        body: "",
+        config: {},
+        points: 0,
+      });
+      renderTappe();
+    }
+
+    function removeTappa(idx) {
+      currentDraft.definition.content.tappe.splice(idx, 1);
+      if (pickingForIdx === idx) pickingForIdx = null;
+      renderTappe();
+      refreshMapMarkers();
+    }
+
+    function duplicateTappa(idx) {
+      const copy = JSON.parse(JSON.stringify(currentDraft.definition.content.tappe[idx]));
+      copy.number = nextTappaNumber();
+      copy.id = `tappa-${copy.number}`;
+      currentDraft.definition.content.tappe.splice(idx + 1, 0, copy);
+      renderTappe();
+      refreshMapMarkers();
+    }
+
+    function configFieldsFor(type, tappa, idx) {
+      if (type === "textMatch") {
+        return `
+          <label>Risposta attesa</label>
+          <input data-field="config.expectedAnswer" data-idx="${idx}" value="${tappa.config.expectedAnswer ?? ""}" />
+          <label>Tipo risposta</label>
+          <select data-field="config.kind" data-idx="${idx}">
+            ${["testo", "guida", "qr"]
+              .map((k) => `<option value="${k}" ${tappa.config.kind === k ? "selected" : ""}>${k}</option>`)
+              .join("")}
+          </select>`;
+      }
+      if (type === "geoAnswer") {
+        return `
+          <label>Tolleranza (metri)</label>
+          <input type="number" data-field="config.toleranceMeters" data-idx="${idx}" value="${tappa.config.toleranceMeters ?? 40}" />`;
+      }
+      return "";
+    }
+
+    function renderTappe() {
+      const box = document.getElementById("tappeList");
+      const tappe = currentDraft.definition.content.tappe;
+      box.innerHTML = tappe
+        .map((t, idx) => {
+          t.config = t.config ?? {};
+          return `
+        <div class="tappa-card ${pickingForIdx === idx ? "picking" : ""}">
+          <div class="grid">
+            <div><label>Numero</label><input type="number" value="${t.number}" data-field="number" data-idx="${idx}" /></div>
+            <div><label>Tipo</label>
+              <select data-field="type" data-idx="${idx}">
+                ${STEP_TYPES.map((s) => `<option value="${s}" ${t.type === s ? "selected" : ""}>${s}</option>`).join("")}
+              </select>
+            </div>
+            <div><label>Punti</label><input type="number" value="${t.points ?? 0}" data-field="points" data-idx="${idx}" /></div>
+            <div><label>Blocco (opz.)</label><input value="${t.block ?? ""}" data-field="block" data-idx="${idx}" /></div>
+            <div><label>Gruppi (opz., numeri squadra separati da virgola)</label><input value="${(t.groups ?? []).join(",")}" data-field="groups" data-idx="${idx}" /></div>
+          </div>
+          <label>Titolo</label>
+          <input style="width:100%; box-sizing:border-box" value="${t.title ?? ""}" data-field="title" data-idx="${idx}" />
+          <label>Testo</label>
+          <textarea rows="2" data-field="body" data-idx="${idx}">${t.body ?? ""}</textarea>
+          <label>Indizio (opz.)</label>
+          <input style="width:100%; box-sizing:border-box" value="${t.hint ?? ""}" data-field="hint" data-idx="${idx}" />
+          <div class="grid">
+            <div><label>Latitudine</label><input type="number" step="any" value="${t.config.lat ?? ""}" data-field="config.lat" data-idx="${idx}" /></div>
+            <div><label>Longitudine</label><input type="number" step="any" value="${t.config.lng ?? ""}" data-field="config.lng" data-idx="${idx}" /></div>
+            <div>${configFieldsFor(t.type, t, idx)}</div>
+          </div>
+          <div class="row" style="margin-top:0.5rem">
+            <button type="button" class="secondary" data-pick="${idx}">📍 Imposta su mappa</button>
+            <button type="button" class="secondary" data-dup="${idx}">Duplica</button>
+            <button type="button" class="danger" data-remove="${idx}">Rimuovi</button>
+          </div>
+        </div>`;
+        })
+        .join("");
+
+      box.querySelectorAll("[data-field]").forEach((el) => {
+        el.addEventListener("input", () => onFieldInput(el));
+      });
+      box.querySelectorAll("[data-pick]").forEach((b) => {
+        b.addEventListener("click", () => {
+          pickingForIdx = pickingForIdx === Number(b.dataset.pick) ? null : Number(b.dataset.pick);
+          renderTappe();
+        });
+      });
+      box.querySelectorAll("[data-dup]").forEach((b) => b.addEventListener("click", () => duplicateTappa(Number(b.dataset.dup))));
+      box.querySelectorAll("[data-remove]").forEach((b) => b.addEventListener("click", () => removeTappa(Number(b.dataset.remove))));
+    }
+
+    function onFieldInput(el) {
+      const idx = Number(el.dataset.idx);
+      const field = el.dataset.field;
+      const tappa = currentDraft.definition.content.tappe[idx];
+      let value = el.value;
+
+      if (field === "groups") {
+        tappa.groups = value.split(",").map((s) => s.trim()).filter(Boolean);
+        return;
+      }
+      if (field === "number" || field === "points") {
+        tappa[field] = value === "" ? 0 : Number(value);
+        if (field === "number") refreshMapMarkers();
+        return;
+      }
+      if (field.startsWith("config.")) {
+        const key = field.slice("config.".length);
+        if (key === "lat" || key === "lng" || key === "toleranceMeters") {
+          tappa.config[key] = value === "" ? undefined : Number(value);
+        } else {
+          tappa.config[key] = value;
+        }
+        if (key === "lat" || key === "lng") refreshMapMarkers();
+        return;
+      }
+      if (field === "type") {
+        tappa.type = value;
+        tappa.config = {}; // i campi di config sono specifici del tipo, non ha senso portarli dietro
+        renderTappe();
+        return;
+      }
+      tappa[field] = value;
+    }
+
+    // --- Mappa (Leaflet + OpenStreetMap): clic per impostare lat/lng della
+    // tappa selezionata con "📍 Imposta su mappa" — nessuna API key, nessun
+    // costo, coerente con la filosofia "zero dipendenze esterne da
+    // scaricare" già seguita nel progetto. ---
+
+    function initMap() {
+      if (map) {
+        map.remove();
+        map = null;
+      }
+      const withCoords = currentDraft.definition.content.tappe.filter((t) => typeof t.config?.lat === "number");
+      const center = withCoords.length > 0 ? [withCoords[0].config.lat, withCoords[0].config.lng] : [44.4949, 11.3426];
+      map = L.map("map").setView(center, 15);
+      L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+        attribution: "© OpenStreetMap",
+      }).addTo(map);
+      map.on("click", (e) => {
+        if (pickingForIdx === null) return;
+        const tappa = currentDraft.definition.content.tappe[pickingForIdx];
+        tappa.config.lat = Number(e.latlng.lat.toFixed(6));
+        tappa.config.lng = Number(e.latlng.lng.toFixed(6));
+        renderTappe();
+        refreshMapMarkers();
+      });
+      refreshMapMarkers();
+    }
+
+    function refreshMapMarkers() {
+      if (!map) return;
+      mapMarkers.forEach((m) => map.removeLayer(m));
+      mapMarkers = [];
+      currentDraft.definition.content.tappe.forEach((t) => {
+        if (typeof t.config?.lat !== "number" || typeof t.config?.lng !== "number") return;
+        const marker = L.marker([t.config.lat, t.config.lng]).addTo(map);
+        marker.bindTooltip(`${t.number}. ${t.title || "(senza titolo)"}`);
+        mapMarkers.push(marker);
+      });
+    }
+
+    // --- Salvataggio / pubblicazione ---
+
+    function collectDefinition() {
+      currentDraft.definition.game.name = document.getElementById("draftName").value.trim();
+      return currentDraft.definition;
+    }
+
+    async function saveDraft() {
+      const errEl = document.getElementById("editorErr");
+      const okEl = document.getElementById("editorOk");
+      errEl.textContent = "";
+      okEl.textContent = "";
+      try {
+        const definition = collectDefinition();
+        currentDraft = await api(`/api/control/game-drafts/${currentDraft.id}`, {
+          method: "PUT",
+          body: JSON.stringify({ name: definition.game.name, definition }),
+        });
+        okEl.textContent = "Bozza salvata.";
+        loadDrafts();
+      } catch (e) {
+        errEl.textContent = e.message;
+      }
+    }
+
+    async function publishDraft() {
+      const errEl = document.getElementById("editorErr");
+      const okEl = document.getElementById("editorOk");
+      errEl.textContent = "";
+      okEl.textContent = "";
+      try {
+        await saveDraft(); // pubblica sempre l'ultima versione modificata, non un salvataggio precedente
+        const res = await api(`/api/control/game-drafts/${currentDraft.id}/publish`, { method: "POST", body: JSON.stringify({}) });
+        okEl.textContent = `Pubblicato: ${res.slug}@${res.version}. Ora è selezionabile in Regia come gameSlug "${res.slug}".`;
+      } catch (e) {
+        errEl.textContent = e.message;
+      }
+    }
+
+    async function deleteDraft() {
+      if (!confirm(`Eliminare definitivamente la bozza "${currentDraft.name}"? Non riguarda le versioni già pubblicate.`)) return;
+      try {
+        await api(`/api/control/game-drafts/${currentDraft.id}`, { method: "DELETE" });
+        currentDraft = null;
+        document.getElementById("draftEditor").style.display = "none";
+        loadDrafts();
+      } catch (e) {
+        alert(e.message);
+      }
+    }
+
+    document.getElementById("createDraftBtn").addEventListener("click", createDraft);
+    document.getElementById("addTappaBtn").addEventListener("click", addTappa);
+    document.getElementById("saveDraftBtn").addEventListener("click", saveDraft);
+    document.getElementById("publishDraftBtn").addEventListener("click", publishDraft);
+    document.getElementById("deleteDraftBtn").addEventListener("click", deleteDraft);
+
+    loadDrafts();
+  </script>
+</body>
+</html>

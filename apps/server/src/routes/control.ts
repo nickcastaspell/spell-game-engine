@@ -13,7 +13,13 @@ import { validateGameDefinition, validateGameDefinitionSemantics } from "../lib/
 import { moduleRegistry } from "../modules-registry";
 import { parseState } from "../lib/teamState";
 import { reopenTeamSubmission } from "../lib/submissionPipeline";
-import { decideItineraryPhoto, generateAndAssignRoutes } from "../lib/itineraryPipeline";
+import {
+  decideItineraryPhoto,
+  generateAndAssignRoutes,
+  getItineraryOverview,
+  getTeamRouteDetail,
+  setTeamRoute,
+} from "../lib/itineraryPipeline";
 import { newFacilitatorToken } from "../lib/tokens";
 import {
   countTeams,
@@ -32,6 +38,7 @@ import {
   listActiveDeviceSessionsForTeams,
   listFacilitators,
   listPendingPhotos,
+  listPhotosForSession,
   listSubmissionsForTeam,
   listTeamStates,
   listTeams,
@@ -329,6 +336,45 @@ controlRouter.post(
   })
 );
 
+// GET /api/control/sessions/:id/itinerary/teams/:teamId/route?phaseId=... —
+// percorso assegnato a una squadra, con distanza prevista (Fase 4: la
+// regia vuole vedere/riordinare i percorsi individuali).
+controlRouter.get(
+  "/sessions/:id/itinerary/teams/:teamId/route",
+  asyncRoute(async (req, res) => {
+    const schema = z.object({ phaseId: z.string() });
+    const { phaseId } = schema.parse(req.query);
+    const detail = getTeamRouteDetail(req.params.id, phaseId, req.params.teamId);
+    sendOk(res, detail);
+  })
+);
+
+// PUT /api/control/sessions/:id/itinerary/teams/:teamId/route — override
+// manuale del percorso (solo le tappe non ancora raggiunte, vedi
+// setTeamRoute in itineraryPipeline.ts per il vincolo sul prefisso già
+// completato).
+controlRouter.put(
+  "/sessions/:id/itinerary/teams/:teamId/route",
+  asyncRoute(async (req, res) => {
+    const schema = z.object({ phaseId: z.string(), sequence: z.array(z.number()) });
+    const { phaseId, sequence } = schema.parse(req.body);
+    const detail = setTeamRoute(req.params.id, phaseId, req.params.teamId, sequence);
+    sendOk(res, detail);
+  })
+);
+
+// GET /api/control/sessions/:id/itinerary/overview?phaseId=... — dove sono
+// le squadre ADESSO (Fase 6, mappa overview regia): solo tappa corrente
+// per squadra, non l'intero percorso (non deve spoilerare le altre).
+controlRouter.get(
+  "/sessions/:id/itinerary/overview",
+  asyncRoute(async (req, res) => {
+    const schema = z.object({ phaseId: z.string() });
+    const { phaseId } = schema.parse(req.query);
+    sendOk(res, getItineraryOverview(req.params.id, phaseId));
+  })
+);
+
 // POST /api/control/sessions/:id/facilitators — crea un facilitatore con
 // token dedicato, scoped su un sottoinsieme di squadre (vuoto = tutte).
 controlRouter.post(
@@ -404,6 +450,36 @@ controlRouter.get(
           teamName: team?.name ?? p.team_id,
           stepId: p.step_id,
           attempt: p.attempt,
+          createdAt: p.created_at,
+        };
+      })
+    );
+  })
+);
+
+// GET /api/control/sessions/:id/itinerary/photos?status=... — galleria
+// (Fase 6): tutte le foto della sessione, non solo quelle in attesa; il
+// pannello "Foto in attesa" sopra resta com'è (operativo, per approvare/
+// rigettare) — questa è una vista aggiuntiva di sola lettura. `status`
+// opzionale filtra su un singolo stato.
+controlRouter.get(
+  "/sessions/:id/itinerary/photos",
+  asyncRoute(async (req, res) => {
+    const schema = z.object({ status: z.enum(["pending", "approved", "rejected"]).optional() });
+    const { status } = schema.parse(req.query);
+    const sessionId = req.params.id;
+    const photos = listPhotosForSession(sessionId, status);
+    sendOk(
+      res,
+      photos.map((p) => {
+        const team = getTeam(p.team_id);
+        return {
+          id: p.id,
+          teamId: p.team_id,
+          teamName: team?.name ?? p.team_id,
+          stepId: p.step_id,
+          attempt: p.attempt,
+          status: p.status,
           createdAt: p.created_at,
         };
       })

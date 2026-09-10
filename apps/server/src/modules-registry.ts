@@ -3,6 +3,7 @@ import {
   classificationModule,
   textMatchModule,
   photoApprovalModule,
+  geoAnswerModule,
   startModule,
   voucherModule,
   finaleModule,
@@ -15,6 +16,7 @@ moduleRegistry.register(classificationModule);
 // Moduli usati dalle tappe di fasi "itinerary" (Il mistero della città).
 moduleRegistry.register(textMatchModule);
 moduleRegistry.register(photoApprovalModule);
+moduleRegistry.register(geoAnswerModule);
 moduleRegistry.register(startModule);
 moduleRegistry.register(voucherModule);
 moduleRegistry.register(finaleModule);

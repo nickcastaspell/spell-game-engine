@@ -4,6 +4,8 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Tavolo — Spell Game Engine</title>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.css" />
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.js"></script>
   <style>
     body { font-family: system-ui, sans-serif; max-width: 520px; margin: 2rem auto; padding: 0 1rem; color: #1a1a2e; }
     h1 { font-size: 1.3rem; }
@@ -17,6 +19,7 @@
     #status { margin: 1rem 0; }
     #err { color: #b91c1c; }
     .hidden { display: none; }
+    #map { height: 240px; border-radius: 8px; margin-top: 0.75rem; }
   </style>
 </head>
 <body>
@@ -33,6 +36,7 @@
     <p><strong id="teamName"></strong> — <span id="statusBadge" class="badge"></span></p>
     <div id="status"></div>
     <div id="activity"></div>
+    <div id="map" class="hidden"></div>
   </div>
 
   <script>
@@ -164,8 +168,52 @@
     let renderedItineraryStepId = null;
     let lastVoucherToken = null;
 
+    // Mappa del percorso proprio (Fase 5): tappe già fatte in verde, tappa
+    // corrente evidenziata, tappe future assenti dalla mappa salvo che la
+    // caccia dichiari itinerary.showUpcomingStops (già filtrato lato
+    // server in "route" — qui disegniamo solo quello che arriva).
+    let map = null;
+    let mapMarkersLayer = null;
+    let mapRenderedForKey = null; // non ridisegnare ad ogni poll se la tappa corrente non è cambiata
+
+    function renderItineraryMap(route, key) {
+      const mapEl = document.getElementById("map");
+      const withCoords = (route || []).filter((r) => typeof r.lat === "number" && typeof r.lng === "number");
+      if (withCoords.length === 0) {
+        mapEl.classList.add("hidden");
+        return;
+      }
+      mapEl.classList.remove("hidden");
+      if (mapRenderedForKey === key) return;
+      mapRenderedForKey = key;
+
+      if (!map) {
+        map = L.map("map");
+        L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", { attribution: "© OpenStreetMap" }).addTo(map);
+      }
+      if (mapMarkersLayer) map.removeLayer(mapMarkersLayer);
+      mapMarkersLayer = L.layerGroup();
+
+      const colorByStatus = { done: "#22c55e", current: "#4338ca", upcoming: "#9ca3af" };
+      withCoords.forEach((r) => {
+        const marker = L.circleMarker([r.lat, r.lng], {
+          radius: r.status === "current" ? 10 : 7,
+          color: colorByStatus[r.status],
+          fillColor: colorByStatus[r.status],
+          fillOpacity: 0.85,
+        });
+        if (r.title) marker.bindTooltip(`${r.number}. ${r.title}`);
+        marker.addTo(mapMarkersLayer);
+      });
+      mapMarkersLayer.addTo(map);
+
+      const focus = withCoords.find((r) => r.status === "current") ?? withCoords[withCoords.length - 1];
+      map.setView([focus.lat, focus.lng], 16);
+    }
+
     function renderItinerary(itin) {
       const el = document.getElementById("activity");
+      renderItineraryMap(itin.route, itin.completed ? "__completed__" : itin.step.id);
 
       if (itin.completed) {
         renderedItineraryStepId = "__completed__";
@@ -205,6 +253,41 @@
           const answer = document.getElementById("answerInput").value.trim();
           if (!answer) return;
           submitItinerary(step.id, { answer });
+        });
+      } else if (step.view.type === "geoAnswer") {
+        el.innerHTML = `
+          <p><small>${progress}</small></p>
+          <h3>${step.title}</h3>
+          <p>${step.body}</p>
+          <button id="geoDetectBtn">📍 Rileva posizione</button>
+          <div id="geoManualFallback" class="hidden">
+            <p><small>Non riusciamo a rilevare la posizione automaticamente. Inserite le coordinate a mano (es. lette da Google Maps, o chiedete al facilitatore):</small></p>
+            <input id="geoLatInput" type="number" step="any" placeholder="Latitudine" />
+            <input id="geoLngInput" type="number" step="any" placeholder="Longitudine" />
+            <button id="geoManualSubmitBtn">Invia coordinate</button>
+          </div>
+          ${hintBtn}
+          <p id="submitErr" style="color:#b91c1c"></p>`;
+        document.getElementById("geoDetectBtn").addEventListener("click", () => {
+          document.getElementById("submitErr").textContent = "";
+          if (!navigator.geolocation) {
+            document.getElementById("geoManualFallback").classList.remove("hidden");
+            return;
+          }
+          navigator.geolocation.getCurrentPosition(
+            (pos) => submitItinerary(step.id, { lat: pos.coords.latitude, lng: pos.coords.longitude }),
+            () => document.getElementById("geoManualFallback").classList.remove("hidden"),
+            { enableHighAccuracy: true, timeout: 10000 }
+          );
+        });
+        document.getElementById("geoManualSubmitBtn").addEventListener("click", () => {
+          const lat = parseFloat(document.getElementById("geoLatInput").value);
+          const lng = parseFloat(document.getElementById("geoLngInput").value);
+          if (Number.isNaN(lat) || Number.isNaN(lng)) {
+            document.getElementById("submitErr").textContent = "Inserite latitudine e longitudine valide.";
+            return;
+          }
+          submitItinerary(step.id, { lat, lng });
         });
       } else if (step.view.type === "photoApproval") {
         el.innerHTML = `

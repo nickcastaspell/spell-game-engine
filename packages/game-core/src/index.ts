@@ -4,6 +4,7 @@ export * from "./pipeline";
 export * from "./modules/classification";
 export * from "./modules/textMatch";
 export * from "./modules/photoApproval";
+export * from "./modules/geoAnswer";
 export * from "./modules/itineraryBasics";
 export * from "./ruleStrategy";
 export * from "./itineraryRouting";
