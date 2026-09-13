@@ -7,6 +7,7 @@ declare global {
   namespace Express {
     interface Request {
       facilitatorId?: string;
+      facilitatorName?: string;
       facilitatorSessionId?: string;
       /** Team id consentiti a questo facilitatore (vuoto = tutte le squadre della sessione, vedi facilitatorCanAccessTeam). */
       facilitatorTeamIds?: string[];
@@ -34,6 +35,7 @@ export async function facilitatorAuth(req: Request, res: Response, next: NextFun
     return;
   }
   req.facilitatorId = facilitator.id;
+  req.facilitatorName = facilitator.name;
   req.facilitatorSessionId = facilitator.session_id;
   req.facilitatorTeamIds = JSON.parse(facilitator.team_ids_json) as string[];
   next();

@@ -18,7 +18,10 @@ import { Effect, GameModule, ModuleContext, ValidationResult } from "@spell/shar
  */
 
 interface TextMatchConfig {
-  expectedAnswer: string;
+  /** Legacy: singola risposta attesa. Le game_version gi\u00e0 pubblicate con solo questo campo restano valide (immutabili). */
+  expectedAnswer?: string;
+  /** Elenco di varianti accettate (refusi noti, sinonimi) \u2014 se presente, ha priorit\u00e0 su expectedAnswer. */
+  expectedAnswers?: string[];
   kind?: "testo" | "guida" | "qr";
   points?: number;
 }
@@ -35,14 +38,24 @@ function getConfig(ctx: ModuleContext): TextMatchConfig {
   return ctx.activityConfig as unknown as TextMatchConfig;
 }
 
+/** Le varianti accettate, qualunque dei due campi sia stato usato in config (vedi TextMatchConfig). */
+function acceptedAnswers(config: TextMatchConfig): string[] {
+  if (Array.isArray(config.expectedAnswers) && config.expectedAnswers.length > 0) {
+    return config.expectedAnswers;
+  }
+  return config.expectedAnswer ? [config.expectedAnswer] : [];
+}
+
 export const textMatchModule: GameModule = {
   type: "textMatch",
 
   validateConfig(config): ValidationResult {
     const c = config as unknown as TextMatchConfig;
     const errors: string[] = [];
-    if (!c.expectedAnswer || typeof c.expectedAnswer !== "string") {
-      errors.push("expectedAnswer mancante o non valido");
+    const hasList = Array.isArray(c.expectedAnswers) && c.expectedAnswers.some((a) => typeof a === "string" && a.trim());
+    const hasLegacy = typeof c.expectedAnswer === "string" && c.expectedAnswer.trim();
+    if (!hasList && !hasLegacy) {
+      errors.push("expectedAnswers (o expectedAnswer) mancante o non valido: serve almeno una risposta accettata");
     }
     if (c.kind !== undefined && !["testo", "guida", "qr"].includes(c.kind)) {
       errors.push('kind deve essere "testo", "guida" o "qr" se presente');
@@ -66,7 +79,8 @@ export const textMatchModule: GameModule = {
   applyRules(ctx, payload): Effect[] {
     const config = getConfig(ctx);
     const answer = String((payload as { answer: string }).answer);
-    const corretta = normalizza(answer) === normalizza(config.expectedAnswer);
+    const answerNorm = normalizza(answer);
+    const corretta = acceptedAnswers(config).some((variant) => normalizza(variant) === answerNorm);
     const effects: Effect[] = [];
 
     effects.push({

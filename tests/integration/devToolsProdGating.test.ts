@@ -99,3 +99,50 @@ describe("GET /api/control/sessions funziona anche in produzione (bug reale: sen
     expect(res.status).toBe(401);
   });
 });
+
+describe("DELETE /api/control/sessions/:id funziona anche in produzione (bug reale: solo Elimina (DEV) esisteva, invisibile senza NODE_ENV di sviluppo)", () => {
+  it("elimina una sessione pur con /api/dev/* assente, in cascata (nessuna squadra residua)", async () => {
+    const game = repo.upsertGame("prod-delete-game", "Gioco per test eliminazione produzione");
+    const definition = {
+      schemaVersion: "0.1",
+      game: { id: "prod-delete-game", name: "Gioco per test eliminazione produzione", defaultLocale: "it" },
+      roles: ["control", "team"],
+      settings: { teamsMin: 1, teamsMax: 5, oneDevicePerTeam: true, showLeaderboard: false },
+      phases: [
+        {
+          id: "fase-1",
+          title: "Fase 1",
+          mode: "single_submission",
+          activity: { id: "att-1", type: "classification", title: "Att 1", config: { itemsSource: "x", categories: ["a"] } },
+          completion: { type: "manual" },
+        },
+      ],
+      content: {},
+      rules: {},
+    };
+    const gameVersion = repo.upsertGameVersion(game.id, definition.schemaVersion, JSON.stringify(definition));
+    const session = repo.createSession(gameVersion.id, "Sessione da eliminare");
+    const team = repo.createTeam(session.id, "Squadra 1", "PRODDEL1");
+
+    const res = await fetch(`${base}/api/control/sessions/${session.id}`, { method: "DELETE", headers: authHeaders });
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.data).toEqual({ deleted: true, id: session.id });
+
+    expect(repo.getSession(session.id)).toBeUndefined();
+    expect(repo.getTeam(team.id)).toBeUndefined();
+
+    const list = await fetch(`${base}/api/control/sessions`, { headers: authHeaders }).then((r) => r.json());
+    expect(list.data.find((s: { id: string }) => s.id === session.id)).toBeUndefined();
+  });
+
+  it("404 su una sessione inesistente", async () => {
+    const res = await fetch(`${base}/api/control/sessions/does-not-exist`, { method: "DELETE", headers: authHeaders });
+    expect(res.status).toBe(404);
+  });
+
+  it("richiede il token regia", async () => {
+    const res = await fetch(`${base}/api/control/sessions/whatever`, { method: "DELETE" });
+    expect(res.status).toBe(401);
+  });
+});

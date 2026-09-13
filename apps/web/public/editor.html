@@ -299,9 +299,16 @@
     function configFieldsFor(type, tappa, idx) {
       if (type === "textMatch") {
         return `
-          <div class="field-narrow" style="flex-basis:9rem">
-            <label>Risposta attesa</label>
-            <input data-field="config.expectedAnswer" data-idx="${idx}" value="${tappa.config.expectedAnswer ?? ""}" style="width:9rem" />
+          <div class="field-narrow" style="flex-basis:12rem">
+            <label>Risposte accettate</label>
+            <input
+              data-field="config.expectedAnswers"
+              data-idx="${idx}"
+              value="${(tappa.config.expectedAnswers ?? (tappa.config.expectedAnswer ? [tappa.config.expectedAnswer] : [])).join(", ")}"
+              placeholder="es. Lucio Dalla, dalla"
+              title="Tutte le varianti accettate (refusi noti, sinonimi), separate da virgola — basta che una combaci."
+              style="width:12rem"
+            />
           </div>
           <div class="field-narrow">
             <label>Tipo risposta</label>
@@ -419,6 +426,9 @@
         const key = field.slice("config.".length);
         if (key === "lat" || key === "lng" || key === "toleranceMeters") {
           tappa.config[key] = value === "" ? undefined : Number(value);
+        } else if (key === "expectedAnswers") {
+          tappa.config.expectedAnswers = value.split(",").map((s) => s.trim()).filter(Boolean);
+          delete tappa.config.expectedAnswer; // il nuovo campo sostituisce quello legacy in questa bozza
         } else {
           tappa.config[key] = value;
         }

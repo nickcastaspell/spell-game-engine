@@ -39,12 +39,28 @@
     th { text-align: left; padding: 8px 10px; font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: .5px; color: var(--muted); border-bottom: 1px solid var(--border); font-family: var(--mono); }
     td { padding: 10px 10px; font-size: 13px; border-bottom: 1px solid var(--border); }
     tr:last-child td { border-bottom: none; }
+    tr.row-clickable { cursor: pointer; }
+    tr.row-clickable:hover td { background: rgba(91,156,246,.07); }
     .dot { display: inline-block; width: 0.7rem; height: 0.7rem; border-radius: 50%; vertical-align: middle; }
     .badge { display: inline-flex; align-items: center; font-family: var(--mono); font-size: 10px; font-weight: 600; padding: 3px 9px; border-radius: 20px; text-transform: uppercase; letter-spacing: .4px; }
     .badge.done { background: rgba(61,214,140,.15); color: var(--green); }
     .badge.progress { background: rgba(91,156,246,.15); color: var(--accent); }
-    #facMap { height: 640px; border-radius: var(--radius); margin-top: 4px; }
+    #facMap { height: 480px; border-radius: var(--radius); margin-top: 4px; }
+    .empty { text-align: center; padding: 30px 10px; color: var(--muted); font-size: 13px; }
+    #whoami { color: var(--green); font-size: 13px; margin: 8px 0 0; }
+    .hidden { display: none !important; }
+    .banner { text-align: center; padding: 12px 16px; border-radius: var(--radius); font-weight: 600; font-size: 13px; margin: 16px 0; }
+    .banner.lobby { background: rgba(245,185,66,.15); color: var(--amber); border: 1px solid rgba(245,185,66,.35); }
+    .banner.paused { background: rgba(240,101,101,.15); color: var(--red); border: 1px solid rgba(240,101,101,.35); }
+    .banner.ended, .banner.waiting { background: var(--bg3); color: var(--sub); border: 1px solid var(--border); }
 
+    /* Tab bar */
+    .tabbar { display: flex; gap: 4px; margin: 16px 0 0; border-bottom: 1px solid var(--border); }
+    .tab-btn { background: none; border: none; border-bottom: 2px solid transparent; color: var(--sub); padding: 10px 14px; font-size: 13px; border-radius: 0; }
+    .tab-btn.active { color: var(--text); border-bottom-color: var(--accent); font-weight: 600; }
+    .tab-btn .nav-badge { margin-left: 6px; background: var(--red); color: white; font-family: var(--mono); font-size: 10px; font-weight: 600; padding: 1px 7px; border-radius: 10px; }
+
+    /* Galleria foto (invariata) */
     .foto-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 14px; margin-top: 4px; }
     .foto-card { background: var(--bg3); border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden; }
     .foto-card.attesa { border-top: 3px solid var(--amber); }
@@ -57,7 +73,37 @@
     .foto-actions { padding: 10px 12px; display: flex; gap: 8px; }
     .btn-green { flex: 1; background: rgba(61,214,140,.2); color: var(--green); border: 1px solid rgba(61,214,140,.35); }
     .btn-red { flex: 1; background: rgba(240,101,101,.2); color: var(--red); border: 1px solid rgba(240,101,101,.35); }
-    .empty { text-align: center; padding: 30px 10px; color: var(--muted); font-size: 13px; }
+
+    .photo-alert { background: rgba(245,185,66,.15); border: 1px solid var(--amber); color: var(--amber); border-radius: var(--radius); padding: 14px 16px; margin-bottom: 12px; font-weight: 600; text-align: center; animation: photo-pulse 1s ease-in-out infinite; }
+    @keyframes photo-pulse { 0%, 100% { opacity: 1; } 50% { opacity: .55; } }
+
+    /* Classifica */
+    .rank-num { font-family: var(--mono); font-weight: 600; color: var(--muted); }
+    .rank-num.top1 { color: var(--amber); }
+    .rank-num.top2 { color: var(--sub); }
+    .rank-num.top3 { color: #c07a3e; }
+    .pts { font-family: var(--mono); font-weight: 600; color: var(--accent); font-size: 14px; }
+
+    /* Pannello di dettaglio (stesso linguaggio visivo dell'admin originale) */
+    .detail-overlay { position: fixed; inset: 0; background: rgba(0,0,0,.5); z-index: 300; }
+    .detail-panel { position: fixed; top: 0; right: 0; width: 380px; max-width: 92vw; height: 100vh; background: var(--bg2); border-left: 1px solid var(--border); z-index: 301; display: flex; flex-direction: column; }
+    .detail-header { padding: 18px 20px 14px; border-bottom: 1px solid var(--border); display: flex; align-items: center; gap: 12px; flex-shrink: 0; }
+    .detail-title { flex: 1; font-size: 15px; font-weight: 600; color: var(--text); }
+    .detail-close { background: var(--bg3); border: 1px solid var(--border2); color: var(--sub); width: 28px; height: 28px; border-radius: var(--radius); cursor: pointer; display: flex; align-items: center; justify-content: center; font-size: 14px; flex-shrink: 0; padding: 0; }
+    .detail-body { flex: 1; overflow-y: auto; padding: 14px 18px; }
+    .detail-step { display: flex; gap: 12px; margin-bottom: 4px; padding: 10px 12px; border-radius: var(--radius); }
+    .detail-step.corrente { background: rgba(91,156,246,.1); border: 1px solid rgba(91,156,246,.25); }
+    .detail-step.futura { opacity: .45; }
+    .detail-pos { font-family: var(--mono); font-size: 11px; color: var(--muted); width: 22px; flex-shrink: 0; padding-top: 2px; text-align: right; }
+    .detail-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; margin-top: 5px; }
+    .detail-dot.completata { background: var(--green); }
+    .detail-dot.corrente { background: var(--accent); }
+    .detail-dot.futura { background: var(--border2); }
+    .detail-info { flex: 1; min-width: 0; }
+    .detail-titolo { font-size: 13px; color: var(--text); font-weight: 500; }
+    .detail-risposta { font-size: 11px; color: var(--sub); margin-top: 2px; font-family: var(--mono); }
+    .detail-risposta.errato { color: var(--red); }
+    .detail-risposta.corretto { color: var(--green); }
   </style>
 </head>
 <body>
@@ -69,50 +115,95 @@
       <div class="card-title">Connessione</div>
       <label>Token facilitatore</label>
       <input id="token" placeholder="es. FAC-XXXXXXXXXX" />
+      <p id="whoami"></p>
       <p id="err"></p>
     </div>
 
-    <div class="card">
-      <div class="card-title">Le mie squadre</div>
-      <table>
-        <thead><tr><th></th><th>Squadra</th><th>Tappa</th><th>Punteggio</th><th>Stato</th></tr></thead>
-        <tbody id="teamsBody"><tr><td colspan="5" class="empty">Inserisci il token per caricare.</td></tr></tbody>
-      </table>
+    <p id="sessionBanner" class="banner hidden"></p>
+
+    <div class="tabbar">
+      <button type="button" class="tab-btn active" data-tab="mappa">🗺️ Mappa</button>
+      <button type="button" class="tab-btn" data-tab="foto">📸 Foto<span id="photoBadge" class="nav-badge hidden">0</span></button>
+      <button type="button" class="tab-btn" data-tab="messaggi">💬 Messaggi</button>
+      <button type="button" class="tab-btn" data-tab="classifica">🏆 Classifica</button>
     </div>
 
-    <div class="card">
-      <div class="card-title">Mappa squadre</div>
-      <div id="facMap"></div>
-    </div>
-
-    <div class="card">
-      <div class="card-title">Foto in attesa di approvazione</div>
-      <div id="pendingPhotos"><p class="empty">Nessuna foto in attesa.</p></div>
-    </div>
-
-    <div class="card">
-      <div class="card-title">Galleria foto</div>
-      <div class="row">
-        <label style="margin:0">Filtra per stato</label>
-        <select id="galleryStatusFilter">
-          <option value="">Tutte</option>
-          <option value="pending">In attesa</option>
-          <option value="approved">Approvate</option>
-          <option value="rejected">Rigettate</option>
-        </select>
+    <div id="tab-mappa" class="tab-panel">
+      <div class="card">
+        <div class="card-title">Le mie squadre</div>
+        <table>
+          <thead><tr><th></th><th>Squadra</th><th>Tappa</th><th>Punteggio</th><th>Stato</th></tr></thead>
+          <tbody id="teamsBody"><tr><td colspan="5" class="empty">Inserisci il token per caricare.</td></tr></tbody>
+        </table>
       </div>
-      <div id="photoGallery"><p class="empty">Nessuna foto.</p></div>
+      <div class="card">
+        <div class="card-title">Mappa percorsi (clicca una squadra in tabella per il dettaglio)</div>
+        <div id="facMap"></div>
+      </div>
+    </div>
+
+    <div id="tab-foto" class="tab-panel hidden">
+      <p id="photoAlert" class="photo-alert hidden">📸 Nuova foto da approvare!</p>
+      <div class="card">
+        <div class="card-title">Foto in attesa di approvazione</div>
+        <div id="pendingPhotos"><p class="empty">Nessuna foto in attesa.</p></div>
+      </div>
+      <div class="card">
+        <div class="card-title">Galleria foto</div>
+        <div class="row">
+          <label style="margin:0">Filtra per stato</label>
+          <select id="galleryStatusFilter">
+            <option value="">Tutte</option>
+            <option value="pending">In attesa</option>
+            <option value="approved">Approvate</option>
+            <option value="rejected">Rigettate</option>
+          </select>
+        </div>
+        <div id="photoGallery"><p class="empty">Nessuna foto.</p></div>
+      </div>
+    </div>
+
+    <div id="tab-messaggi" class="tab-panel hidden">
+      <div class="card">
+        <p class="empty">In arrivo — chat squadra↔facilitatore e bacheca, non ancora sviluppate.</p>
+      </div>
+    </div>
+
+    <div id="tab-classifica" class="tab-panel hidden">
+      <div class="card">
+        <div class="card-title">Classifica — tutte le squadre della sessione</div>
+        <table>
+          <thead><tr><th>#</th><th>Squadra</th><th>Punteggio</th></tr></thead>
+          <tbody id="leaderboardBody"><tr><td colspan="3" class="empty">Inserisci il token per caricare.</td></tr></tbody>
+        </table>
+      </div>
     </div>
   </div>
 
+  <div id="detailOverlay" class="detail-overlay hidden"></div>
+  <div id="detailPanel" class="detail-panel hidden">
+    <div class="detail-header">
+      <div class="detail-title" id="detailTitle"></div>
+      <button type="button" class="detail-close" id="detailClose">✕</button>
+    </div>
+    <div class="detail-body" id="detailBody"></div>
+  </div>
+
   <script>
-    // Colori distinti per squadra (tabella + pin sulla mappa), ciclici se
-    // ci sono più squadre che colori — l'ordine è quello restituito da
-    // /api/facilitator/overview, stabile tra un poll e l'altro perché il
-    // backend ordina per team.created_at.
+    // Colori distinti per squadra (tabella + pin/linee sulla mappa),
+    // ciclici se ci sono più squadre che colori — l'ordine è quello
+    // restituito dal backend, stabile tra un poll e l'altro perché
+    // ordina per team.created_at.
     const TEAM_COLORS = ["#5b9cf6", "#3dd68c", "#f5b942", "#f06565", "#a78bfa", "#22d3ee", "#f472b6", "#84cc16", "#fb923c", "#818cf8"];
     function colorForIndex(i) {
       return TEAM_COLORS[i % TEAM_COLORS.length];
+    }
+    // Versione "spenta" dello stesso colore (tappe già fatte): sfuma verso
+    // il grigio di sfondo invece di usare un secondo colore per squadra.
+    function mutedColor(hex) {
+      const n = parseInt(hex.slice(1), 16);
+      const r = (n >> 16) & 255, g = (n >> 8) & 255, b = n & 255;
+      return `rgb(${Math.round(r * 0.4 + 45)}, ${Math.round(g * 0.4 + 45)}, ${Math.round(b * 0.4 + 45)})`;
     }
 
     function token() {
@@ -151,9 +242,20 @@
       refreshAll();
     });
 
+    // --- Tab bar ---
+    document.querySelectorAll(".tab-btn").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        document.querySelectorAll(".tab-btn").forEach((b) => b.classList.toggle("active", b === btn));
+        document.querySelectorAll(".tab-panel").forEach((p) => p.classList.toggle("hidden", p.id !== `tab-${btn.dataset.tab}`));
+      });
+    });
+
     let pollTimer = null;
     let facMap = null;
     let facMarkersLayer = null;
+    let latestRoutes = []; // dati di /api/facilitator/routes, riusati dal pannello di dettaglio
+    let knownPendingIds = null; // per rilevare foto NUOVE tra un poll e l'altro
+    let notificationAsked = false;
 
     function startPolling() {
       if (pollTimer) clearInterval(pollTimer);
@@ -161,45 +263,94 @@
       refreshAll();
     }
 
+    // Stesso banner (testo/classe) di team.html: la sessione può essere in
+    // sala d'attesa o in pausa indipendentemente dal fatto che il gioco sia
+    // itinerary/pump/altro, quindi va risolto separatamente dalle rotte
+    // itinerary (che invece richiedono una fase itinerary).
+    function sessionStatusBanner(status) {
+      switch (status) {
+        case "DRAFT":
+          return { text: "In attesa che la regia avvii il gioco.", cls: "waiting" };
+        case "LOBBY":
+          return { text: "🕓 Sala d'attesa — il gioco sta per iniziare.", cls: "lobby" };
+        case "PAUSED":
+          return { text: "⏸️ Gioco in pausa — resta collegato, riprende a breve.", cls: "paused" };
+        case "COMPLETED":
+        case "ARCHIVED":
+          return { text: "🏁 Sessione conclusa.", cls: "ended" };
+        default:
+          return null; // RUNNING: nessun banner
+      }
+    }
+
     async function refreshAll() {
       if (!token()) return;
       document.getElementById("err").textContent = "";
       try {
-        const overview = await api("/api/facilitator/overview");
-        renderTeamsTable(overview);
-        renderMap(overview);
+        const me = await api("/api/facilitator/me");
+        document.getElementById("whoami").textContent = `Connesso come: ${me.name}`;
+        const bannerEl = document.getElementById("sessionBanner");
+        const banner = sessionStatusBanner(me.sessionStatus);
+        if (banner) {
+          bannerEl.textContent = banner.text;
+          bannerEl.className = "banner " + banner.cls;
+        } else {
+          bannerEl.className = "banner hidden";
+        }
       } catch (e) {
         document.getElementById("err").textContent = e.message;
         return;
       }
+      try {
+        latestRoutes = await api("/api/facilitator/routes");
+        renderTeamsTable(latestRoutes);
+        renderMap(latestRoutes);
+        if (detailOpenForTeamId) renderDetail(detailOpenForTeamId); // tieni aggiornato il pannello se aperto
+      } catch (e) {
+        document.getElementById("err").textContent = e.message;
+      }
       loadPendingPhotos();
       loadGallery();
+      loadLeaderboard();
     }
 
-    function renderTeamsTable(overview) {
+    // --- Tab Mappa ---
+
+    function renderTeamsTable(routes) {
       const body = document.getElementById("teamsBody");
-      if (overview.length === 0) {
+      if (routes.length === 0) {
         body.innerHTML = `<tr><td colspan="5" class="empty">Nessuna squadra assegnata.</td></tr>`;
         return;
       }
-      body.innerHTML = overview
-        .map((entry, i) => {
-          const statusBadge = entry.completed
-            ? `<span class="badge done">Completato</span>`
-            : `<span class="badge progress">In corso</span>`;
+      body.innerHTML = routes
+        .map((r, i) => {
+          const statusBadge = r.completed ? `<span class="badge done">Completato</span>` : `<span class="badge progress">In corso</span>`;
           return `
-        <tr>
+        <tr class="row-clickable" data-team-id="${r.teamId}">
           <td><span class="dot" style="background:${colorForIndex(i)}"></span></td>
-          <td>${entry.teamName}</td>
-          <td>${entry.position} / ${entry.totalSteps}</td>
-          <td>${entry.score ?? 0}</td>
+          <td>${r.teamName}</td>
+          <td>${r.position} / ${r.totalSteps}</td>
+          <td data-score-for="${r.teamId}">—</td>
           <td>${statusBadge}</td>
         </tr>`;
         })
         .join("");
+      body.querySelectorAll("tr[data-team-id]").forEach((tr) => {
+        tr.addEventListener("click", () => openDetail(tr.dataset.teamId));
+      });
+      // Il punteggio vero vive nella classifica (endpoint dedicato, non scoped) — la fondiamo qui per riga.
+      api("/api/facilitator/leaderboard")
+        .then((leaderboard) => {
+          const scoreByTeam = new Map(leaderboard.map((e) => [e.teamId, e.score]));
+          body.querySelectorAll("[data-score-for]").forEach((td) => {
+            const s = scoreByTeam.get(td.dataset.scoreFor);
+            if (s !== undefined) td.textContent = s;
+          });
+        })
+        .catch(() => {});
     }
 
-    function renderMap(overview) {
+    function renderMap(routes) {
       if (!facMap) {
         facMap = L.map("facMap").setView([44.4949, 11.3426], 15);
         L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", { attribution: "© OpenStreetMap" }).addTo(facMap);
@@ -207,29 +358,106 @@
       if (facMarkersLayer) facMap.removeLayer(facMarkersLayer);
       facMarkersLayer = L.layerGroup();
 
-      const withCoords = [];
-      overview.forEach((entry, i) => {
-        if (!entry.currentStep || entry.currentStep.lat === null || entry.currentStep.lng === null) return;
+      const allCoords = [];
+      routes.forEach((r, i) => {
         const color = colorForIndex(i);
-        const marker = L.circleMarker([entry.currentStep.lat, entry.currentStep.lng], {
-          radius: 9,
-          color,
-          fillColor: color,
-          fillOpacity: 0.9,
-          weight: 2,
+        const withCoords = r.steps.filter((s) => typeof s.lat === "number" && typeof s.lng === "number");
+        if (withCoords.length === 0) return;
+
+        // Linea che collega le tappe nell'ordine del percorso.
+        L.polyline(withCoords.map((s) => [s.lat, s.lng]), { color, weight: 2, opacity: 0.5 }).addTo(facMarkersLayer);
+
+        withCoords.forEach((s) => {
+          const isCurrent = s.status === "current";
+          const marker = L.circleMarker([s.lat, s.lng], {
+            radius: isCurrent ? 9 : 6,
+            color: s.status === "done" ? mutedColor(color) : color,
+            fillColor: s.status === "done" ? mutedColor(color) : color,
+            fillOpacity: isCurrent ? 0.95 : 0.7,
+            weight: isCurrent ? 3 : 1.5,
+          });
+          marker.bindTooltip(`${r.teamName} — ${s.number}. ${s.title || ""}`);
+          marker.on("click", () => openDetail(r.teamId));
+          marker.addTo(facMarkersLayer);
+          allCoords.push([s.lat, s.lng]);
         });
-        marker.bindTooltip(entry.teamName, { permanent: true, direction: "top", className: "team-label" });
-        marker.addTo(facMarkersLayer);
-        withCoords.push([entry.currentStep.lat, entry.currentStep.lng]);
       });
       facMarkersLayer.addTo(facMap);
-      if (withCoords.length > 0) facMap.fitBounds(withCoords, { padding: [40, 40], maxZoom: 17 });
+      if (allCoords.length > 0) facMap.fitBounds(allCoords, { padding: [40, 40], maxZoom: 17 });
     }
+
+    // --- Pannello di dettaglio squadra ---
+
+    let detailOpenForTeamId = null;
+
+    function openDetail(teamId) {
+      detailOpenForTeamId = teamId;
+      document.getElementById("detailOverlay").classList.remove("hidden");
+      document.getElementById("detailPanel").classList.remove("hidden");
+      renderDetail(teamId);
+    }
+
+    function closeDetail() {
+      detailOpenForTeamId = null;
+      document.getElementById("detailOverlay").classList.add("hidden");
+      document.getElementById("detailPanel").classList.add("hidden");
+    }
+
+    document.getElementById("detailOverlay").addEventListener("click", closeDetail);
+    document.getElementById("detailClose").addEventListener("click", closeDetail);
+
+    function renderDetail(teamId) {
+      const route = latestRoutes.find((r) => r.teamId === teamId);
+      if (!route) return;
+      document.getElementById("detailTitle").textContent = route.teamName;
+      document.getElementById("detailBody").innerHTML = route.steps
+        .map((s) => {
+          const cls = s.status === "done" ? "completata" : s.status === "current" ? "corrente" : "futura";
+          let rispostaHtml = "";
+          if (s.stepLog) {
+            const esito = s.stepLog.esito;
+            const dettaglio = s.stepLog.risposta ?? (typeof s.stepLog.distanzaMetri === "number" ? `${s.stepLog.distanzaMetri} m dal punto atteso` : "");
+            const esitoCls = esito === "corretto" ? "corretto" : esito === "errato" ? "errato" : "";
+            rispostaHtml = `<div class="detail-risposta ${esitoCls}">${esito ?? ""}${dettaglio ? " — " + dettaglio : ""}</div>`;
+          }
+          return `
+        <div class="detail-step ${cls}">
+          <div class="detail-pos">${s.number}</div>
+          <div class="detail-dot ${cls}"></div>
+          <div class="detail-info">
+            <div class="detail-titolo">${s.title ?? `Tappa ${s.number}`}</div>
+            ${rispostaHtml}
+          </div>
+        </div>`;
+        })
+        .join("");
+    }
+
+    // --- Tab Foto ---
 
     async function loadPendingPhotos() {
       const box = document.getElementById("pendingPhotos");
       try {
         const photos = await api("/api/facilitator/photos/pending");
+
+        // Alert su foto NUOVA (Fase 6): confronta con l'insieme visto
+        // all'ultimo poll, non solo "c'è qualcosa in attesa" (altrimenti
+        // l'alert resterebbe attivo finché la coda non si svuota del tutto).
+        const currentIds = new Set(photos.map((p) => p.id));
+        if (knownPendingIds !== null) {
+          const hasNew = [...currentIds].some((id) => !knownPendingIds.has(id));
+          if (hasNew) triggerPhotoAlert();
+        }
+        knownPendingIds = currentIds;
+
+        const badge = document.getElementById("photoBadge");
+        if (photos.length > 0) {
+          badge.textContent = photos.length;
+          badge.classList.remove("hidden");
+        } else {
+          badge.classList.add("hidden");
+        }
+
         if (photos.length === 0) {
           box.innerHTML = '<p class="empty">Nessuna foto in attesa.</p>';
           return;
@@ -252,6 +480,41 @@
           .join("")}</div>`;
       } catch (e) {
         box.innerHTML = `<p id="err">${e.message}</p>`;
+      }
+    }
+
+    // Avviso su nuova foto: banner lampeggiante (sempre) + Notification del
+    // browser se il permesso è già concesso (richiesto una volta, degrado
+    // silenzioso se negato) + un breve beep via Web Audio (nessun asset da
+    // scaricare).
+    function triggerPhotoAlert() {
+      const el = document.getElementById("photoAlert");
+      el.classList.remove("hidden");
+      setTimeout(() => el.classList.add("hidden"), 8000);
+
+      if (!notificationAsked && "Notification" in window && Notification.permission === "default") {
+        notificationAsked = true;
+        Notification.requestPermission();
+      }
+      if ("Notification" in window && Notification.permission === "granted") {
+        try {
+          new Notification("Nuova foto da approvare", { body: "Una squadra ha inviato una foto." });
+        } catch (e) {
+          // alcuni browser mobile non supportano new Notification() fuori da un service worker: degrado silenzioso
+        }
+      }
+      try {
+        const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        const osc = audioCtx.createOscillator();
+        const gain = audioCtx.createGain();
+        osc.frequency.value = 880;
+        gain.gain.setValueAtTime(0.15, audioCtx.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.4);
+        osc.connect(gain).connect(audioCtx.destination);
+        osc.start();
+        osc.stop(audioCtx.currentTime + 0.4);
+      } catch (e) {
+        // Web Audio non disponibile: il banner resta comunque visibile
       }
     }
 
@@ -295,6 +558,33 @@
     }
 
     document.getElementById("galleryStatusFilter").addEventListener("change", loadGallery);
+
+    // --- Tab Classifica ---
+
+    async function loadLeaderboard() {
+      const body = document.getElementById("leaderboardBody");
+      try {
+        const leaderboard = await api("/api/facilitator/leaderboard");
+        if (leaderboard.length === 0) {
+          body.innerHTML = `<tr><td colspan="3" class="empty">Nessuna squadra in questa sessione.</td></tr>`;
+          return;
+        }
+        body.innerHTML = leaderboard
+          .map((e, i) => {
+            const rank = i + 1;
+            const rankCls = rank <= 3 ? `top${rank}` : "";
+            return `
+          <tr>
+            <td class="rank-num ${rankCls}">${rank}</td>
+            <td>${e.teamName}</td>
+            <td class="pts">${e.score}</td>
+          </tr>`;
+          })
+          .join("");
+      } catch (e) {
+        body.innerHTML = `<tr><td colspan="3" class="empty">${e.message}</td></tr>`;
+      }
+    }
 
     startPolling();
   </script>

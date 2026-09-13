@@ -4,7 +4,8 @@ import "./lib/db"; // side-effect: carica .env dalla root PRIMA di qualunque
 // dei valori da .env (bug reale, vedi cronologia).
 import express from "express";
 import path from "node:path";
-import { requestIdMiddleware, sendErr } from "./lib/response";
+import { asyncRoute, requestIdMiddleware, sendErr, sendOk } from "./lib/response";
+import { listGames } from "./lib/repo";
 import { controlRouter } from "./routes/control";
 import { authoringRouter } from "./routes/authoring";
 import { teamRouter } from "./routes/team";
@@ -18,6 +19,18 @@ export function createApp() {
   const app = express();
   app.use(express.json());
   app.use(requestIdMiddleware);
+
+  // GET /api/games — pubblico, nessun token: nome/slug dei giochi
+  // pubblicati non sono dati sensibili, serve alla home (index.html) per
+  // mostrare quali cacce ospita la piattaforma. Variante non autenticata
+  // di GET /api/control/games (quella resta per il selettore "Crea
+  // sessione" in Regia, che richiede comunque il token per il resto).
+  app.get(
+    "/api/games",
+    asyncRoute(async (_req, res) => {
+      sendOk(res, listGames().map((g) => ({ slug: g.slug, name: g.name })));
+    })
+  );
 
   app.use("/api/control", controlRouter);
   app.use("/api/control", authoringRouter);

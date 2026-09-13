@@ -74,6 +74,11 @@
     .completed-title { font-family: 'Playfair Display', serif; font-size: 24px; font-weight: 900; color: var(--sage); margin-bottom: 6px; }
     .completed-pts { font-size: 14px; color: var(--muted); }
 
+    .session-banner { text-align: center; padding: 24px 20px; border-radius: var(--radius); font-family: 'Playfair Display', serif; font-size: 17px; font-weight: 700; margin-top: 12px; }
+    .session-banner.waiting, .session-banner.ended { background: var(--paper2); border: 1px solid var(--border); color: var(--muted); }
+    .session-banner.lobby { background: #fff8e6; border: 1px solid #e8c96a; color: #9a7010; }
+    .session-banner.paused { background: #fde8e4; border: 1px solid var(--rust); color: var(--rust); }
+
     #submitErr { color: var(--rust); font-size: 13px; margin: 0 0 8px; }
     #map { height: 240px; border-radius: var(--radius); margin-top: 4px; }
     .hidden { display: none; }
@@ -155,9 +160,51 @@
 
     let renderedActivityKey = null; // vedi renderState: evita di ricostruire il form ad ogni poll
 
+    // Banner di stato sessione (sala d'attesa/pausa/conclusa) — stessa
+    // logica di facilitator.html, indipendente dal tipo di gioco/fase:
+    // va controllato PRIMA di decidere quale renderer di attività usare.
+    function sessionStatusBanner(status) {
+      switch (status) {
+        case "DRAFT":
+          return { text: "In attesa che la regia avvii il gioco.", cls: "waiting" };
+        case "LOBBY":
+          return { text: "🕓 Sala d'attesa — il gioco sta per iniziare.", cls: "lobby" };
+        case "PAUSED":
+          return { text: "⏸️ Gioco in pausa — resta collegato, riprende a breve.", cls: "paused" };
+        case "COMPLETED":
+        case "ARCHIVED":
+          return { text: "🏁 Sessione conclusa.", cls: "ended" };
+        default:
+          return null; // RUNNING: nessun banner
+      }
+    }
+
+    let bannerShown = false; // vedi sotto: forza il ridisegno quando si torna a RUNNING
+
     async function poll() {
       try {
         const state = await api("/api/team/state");
+
+        const banner = sessionStatusBanner(state.sessionStatus);
+        if (banner) {
+          bannerShown = true;
+          document.getElementById("statusBadge").textContent = state.sessionStatus;
+          document.getElementById("statusBadge").className = "badge closed";
+          document.getElementById("status").textContent = "";
+          document.getElementById("activity").innerHTML = `<div class="session-banner ${banner.cls}">${banner.text}</div>`;
+          return;
+        }
+        if (bannerShown) {
+          // Si torna a RUNNING dopo un banner: le chiavi di dedupe sotto
+          // sono ferme a prima della pausa, altrimenti il form troverebbe
+          // la stessa chiave e NON ridisegnerebbe sopra l'HTML del banner
+          // rimasto in #activity.
+          bannerShown = false;
+          renderedActivityKey = null;
+          renderedItineraryStepId = null;
+          mapRenderedForKey = null;
+        }
+
         if (!state.activity && state.currentPhaseId) {
           try {
             const itin = await api("/api/team/itinerary/status");
@@ -495,7 +542,16 @@
       if (e.key === "Enter") login();
     });
 
-    if (token) showGame();
+    // Login automatico da QR/link (Fase 3): il QR stampato per le squadre
+    // codifica team.html?code=XXXXXX, non il solo codice — chi scansiona
+    // entra subito, senza dover ricopiare nulla a mano.
+    const codeFromUrl = new URLSearchParams(location.search).get("code");
+    if (token) {
+      showGame();
+    } else if (codeFromUrl) {
+      document.getElementById("code").value = codeFromUrl;
+      login();
+    }
   </script>
 </body>
 </html>

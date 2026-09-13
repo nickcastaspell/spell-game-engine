@@ -27,6 +27,7 @@ import {
   createFacilitator,
   createSession,
   createTeam,
+  deleteSessionCascade,
   ensureTeamState,
   getGameBySlug,
   getGameVersionById,
@@ -99,6 +100,25 @@ controlRouter.get(
         teamCount: r.team_count,
       }))
     );
+  })
+);
+
+// DELETE /api/control/sessions/:id — cancellazione completa e
+// irreversibile (sessione, squadre, token, tutti gli eventi collegati).
+// A differenza di DELETE /api/dev/sessions/:id (solo ambiente di
+// sviluppo), questa resta disponibile anche in produzione: liberarsi di
+// una sessione creata per errore o non più utile è un'operazione di
+// prodotto, non uno strumento di debug — riusa la stessa
+// deleteSessionCascade, nessuna differenza di comportamento.
+controlRouter.delete(
+  "/sessions/:id",
+  asyncRoute(async (req, res) => {
+    const sessionId = req.params.id;
+    const session = getSession(sessionId);
+    if (!session) throw new ApiError(404, "session_not_found", "Sessione non trovata");
+
+    deleteSessionCascade(sessionId);
+    sendOk(res, { deleted: true, id: sessionId });
   })
 );
 

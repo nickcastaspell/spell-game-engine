@@ -6,6 +6,7 @@
   <title>Regia — Spell Game Engine</title>
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.css" />
   <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcode/1.5.1/qrcode.min.js"></script>
   <style>
     body { font-family: system-ui, sans-serif; max-width: 900px; margin: 2rem auto; padding: 0 1rem; color: #1a1a2e; }
     h1 { font-size: 1.3rem; }
@@ -95,6 +96,7 @@
 
     <fieldset>
       <legend>Dashboard squadre</legend>
+      <p><a id="printTeamsLink" href="#" target="_blank">🖨️ Stampa QR squadre</a></p>
       <p id="summary"></p>
       <table>
         <thead><tr><th>Squadra</th><th>Codice</th><th>Conn.</th><th>Inviato</th><th>Punteggio</th><th>Azione</th></tr></thead>
@@ -241,10 +243,11 @@
     }
 
     // --- Elenco sessioni: sempre visibile, anche in produzione (usa
-    // GET /api/control/sessions, una LETTURA senza effetti — a differenza
-    // di Duplica/Riapri/Elimina, che restano azioni da ambiente di
-    // sviluppo, vedi routes/dev.ts) — senza questo, chi crea una sessione
-    // e lascia/ricarica la pagina non avrebbe modo di ritrovarla. ---
+    // GET /api/control/sessions, una LETTURA senza effetti) — senza
+    // questo, chi crea una sessione e lascia/ricarica la pagina non
+    // avrebbe modo di ritrovarla. Apri/Archivia/Elimina sono azioni di
+    // prodotto, sempre disponibili; Duplica/Riapri restano da ambiente
+    // di sviluppo (vedi routes/dev.ts). ---
 
     async function loadSessionsArchive() {
       const box = document.getElementById("sessionsList");
@@ -266,11 +269,11 @@
               <span>${s.teamCount} squadre</span>
               <button onclick="withFeedback(this, () => openSessionInDashboard('${s.id}'))">Apri</button>
               <button class="secondary" onclick="withFeedback(this, () => archiveSessionArchive('${s.id}'))" ${canArchive ? "" : 'disabled title="solo da COMPLETED"'}>Archivia</button>
+              <button class="danger" onclick="withFeedback(this, () => deleteSessionArchive('${s.id}'))">Elimina</button>
               ${
                 devMode
                   ? `<button class="secondary" onclick="withFeedback(this, () => duplicateSessionArchive('${s.id}'))">Duplica</button>
-                     ${canReopen ? `<button class="secondary" onclick="withFeedback(this, () => reopenSessionArchive('${s.id}'))">Riapri</button>` : ""}
-                     <button class="danger" onclick="withFeedback(this, () => deleteSessionArchive('${s.id}'))">Elimina (DEV)</button>`
+                     ${canReopen ? `<button class="secondary" onclick="withFeedback(this, () => reopenSessionArchive('${s.id}'))">Riapri</button>` : ""}`
                   : ""
               }
             </div>`;
@@ -320,7 +323,7 @@
     async function deleteSessionArchive(id) {
       if (!confirm("Eliminare definitivamente questa sessione, le sue squadre e tutti gli eventi collegati?")) return;
       try {
-        await api(`/api/dev/sessions/${id}`, { method: "DELETE" });
+        await api(`/api/control/sessions/${id}`, { method: "DELETE" });
         if (sid === id) {
           sid = null;
           document.getElementById("managePanel").style.display = "none";
@@ -337,6 +340,7 @@
       sid = id;
       document.getElementById("err").textContent = "";
       document.getElementById("sid").textContent = sid;
+      document.getElementById("printTeamsLink").href = `/print-teams.html?sessionId=${sid}`;
       document.getElementById("managePanel").style.display = "block";
       if (pollTimer) clearInterval(pollTimer);
       pollTimer = setInterval(refreshDashboard, 4000);
@@ -828,7 +832,7 @@
             (t) => `
           <tr>
             <td>${t.name}</td>
-            <td><code>${t.accessCode}</code></td>
+            <td><code>${t.accessCode}</code> <canvas id="qr-${t.teamId}" style="vertical-align:middle; margin-left:0.3rem"></canvas></td>
             <td><span class="dot ${t.connected ? "on" : "off"}"></span></td>
             <td>${t.submitted ? "✅" : "—"}</td>
             <td>${t.score}</td>
@@ -836,6 +840,11 @@
           </tr>`
           )
           .join("");
+        d.teams.forEach((t) => {
+          const canvas = document.getElementById(`qr-${t.teamId}`);
+          const url = `${location.origin}/team.html?code=${t.accessCode}`;
+          QRCode.toCanvas(canvas, url, { width: 48, margin: 0 }, () => {});
+        });
       } catch (e) {
         // token errato o sessione non trovata: ignora al prossimo tick
       }

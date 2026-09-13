@@ -242,6 +242,26 @@ describe("interfaccia facilitatore: overview e galleria scoped alle proprie squa
     expect(overview.json.data[0].sequence).toBeUndefined();
   });
 
+  it("GET /api/facilitator/me restituisce il proprio nome e lo stato della sessione (Fase 4: verifica token + banner sala d'attesa/pausa)", async () => {
+    const created = await post(
+      `/api/control/sessions/${hiddenSessionId}/facilitators`,
+      { name: "Mauro", teamIds: [] },
+      "test-control-token"
+    );
+    const facToken = created.json.data.token as string;
+
+    const me = await get("/api/facilitator/me", facToken);
+    expect(me.status).toBe(200);
+    expect(me.json.data.name).toBe("Mauro");
+    expect(me.json.data.sessionId).toBe(hiddenSessionId);
+    expect(typeof me.json.data.sessionStatus).toBe("string");
+  });
+
+  it("GET /api/facilitator/me risponde 401 con un token non valido", async () => {
+    const res = await get("/api/facilitator/me", "token-inventato");
+    expect(res.status).toBe(401);
+  });
+
   it("un facilitatore senza squadre assegnate vede tutta la sessione (elenco vuoto = tutte)", async () => {
     const created = await post(
       `/api/control/sessions/${hiddenSessionId}/facilitators`,
@@ -277,5 +297,49 @@ describe("interfaccia facilitatore: overview e galleria scoped alle proprie squa
     );
     const galleryTeam2 = await get("/api/facilitator/photos", facForTeam2.json.data.token);
     expect(galleryTeam2.json.data).toHaveLength(0);
+  });
+
+  it("GET /api/facilitator/routes espone il percorso COMPLETO (tappe future incluse) con stato ed esito, scoped alle proprie squadre", async () => {
+    const teams = repo.listTeams(hiddenSessionId);
+    const team1 = teams.find((t) => t.access_code === "MAPHID1")!; // già avanzata oltre la prima tappa
+
+    const created = await post(
+      `/api/control/sessions/${hiddenSessionId}/facilitators`,
+      { name: "Fac routes", teamIds: [team1.id] },
+      "test-control-token"
+    );
+    const res = await get("/api/facilitator/routes", created.json.data.token);
+    expect(res.status).toBe(200);
+    expect(res.json.data).toHaveLength(1);
+
+    const route = res.json.data[0];
+    expect(route.teamId).toBe(team1.id);
+    // A differenza di /overview, qui ci sono TUTTE le tappe, non solo quella corrente.
+    expect(route.steps.length).toBeGreaterThan(1);
+    const statuses = route.steps.map((s: { status: string }) => s.status);
+    expect(statuses).toContain("done");
+    expect(statuses.filter((s: string) => s === "current")).toHaveLength(route.completed ? 0 : 1);
+    // Le tappe già fatte hanno un esito registrato (scritto da textMatch/geoAnswer).
+    const doneWithLog = route.steps.filter((s: { status: string; stepLog: unknown }) => s.status === "done" && s.stepLog);
+    expect(doneWithLog.length).toBeGreaterThan(0);
+  });
+
+  it("GET /api/facilitator/leaderboard mostra TUTTE le squadre della sessione, non solo quelle assegnate", async () => {
+    const teams = repo.listTeams(hiddenSessionId);
+    const team1 = teams.find((t) => t.access_code === "MAPHID1")!;
+
+    const created = await post(
+      `/api/control/sessions/${hiddenSessionId}/facilitators`,
+      { name: "Fac leaderboard", teamIds: [team1.id] }, // scoped su una sola squadra
+      "test-control-token"
+    );
+    const res = await get("/api/facilitator/leaderboard", created.json.data.token);
+    expect(res.status).toBe(200);
+    // Non scoped: deve includere ANCHE le squadre non assegnate a questo facilitatore.
+    expect(res.json.data.length).toBe(teams.length);
+    expect(res.json.data.map((e: { teamId: string }) => e.teamId)).toEqual(expect.arrayContaining(teams.map((t) => t.id)));
+    // Ordinata per punteggio decrescente.
+    const scores = res.json.data.map((e: { score: number }) => e.score);
+    expect(scores).toEqual([...scores].sort((a: number, b: number) => b - a));
   });
 });

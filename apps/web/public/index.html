@@ -5,18 +5,48 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Spell Game Engine</title>
   <style>
-    body { font-family: system-ui, sans-serif; max-width: 480px; margin: 4rem auto; text-align: center; color: #1a1a2e; }
+    body { font-family: system-ui, sans-serif; max-width: 480px; margin: 4rem auto; padding: 0 1rem; text-align: center; color: #1a1a2e; }
     a.btn { display: block; margin: 1rem 0; padding: 1rem; background: #4338ca; color: white; text-decoration: none; border-radius: 8px; font-weight: 600; }
     a.btn.secondary { background: #1a1a2e; }
     p.hint { color: #666; font-size: 0.9rem; }
+    .games-box { text-align: left; background: #f4f4f8; border-radius: 8px; padding: 0.75rem 1rem; margin: 1.5rem 0; }
+    .games-box h2 { font-size: 0.85rem; text-transform: uppercase; letter-spacing: 0.5px; color: #666; margin: 0 0 0.5rem; }
+    .games-box ul { margin: 0; padding-left: 1.2rem; }
+    .games-box li { margin: 0.2rem 0; }
+    .games-box p.legacy { color: #888; font-size: 0.8rem; margin: 0.6rem 0 0; font-style: italic; }
   </style>
 </head>
 <body>
   <h1>Spell Game Engine</h1>
-  <p class="hint">Prototipo MVP — motore comune per i business game Spell.</p>
+  <p class="hint">Motore comune per i business game Spell — una piattaforma, più cacce.</p>
+
+  <div class="games-box">
+    <h2>Giochi disponibili</h2>
+    <ul id="gamesList"><li>Caricamento…</li></ul>
+    <p class="legacy">"Less is More" vive ancora sulla sua vecchia piattaforma separata, in attesa di essere migrato.</p>
+  </div>
+
   <a class="btn" href="/team.html">Entra come Squadra</a>
   <a class="btn secondary" href="/control.html">Entra come Regia</a>
   <a class="btn secondary" href="/editor.html">Editor caccia (crea/modifica città e tappe)</a>
   <a class="btn secondary" href="/facilitator.html">Entra come Facilitatore</a>
+
+  <script>
+    // Elenco pubblico (nessun token, vedi GET /api/games in app.ts): una
+    // squadra entra comunque con il proprio codice, che la porta già al
+    // gioco giusto — questo elenco è solo informativo, non un selettore.
+    fetch("/api/games")
+      .then((r) => r.json())
+      .then((body) => {
+        const list = document.getElementById("gamesList");
+        const games = body.data || [];
+        list.innerHTML = games.length
+          ? games.map((g) => `<li>${g.name}</li>`).join("")
+          : "<li>Nessun gioco pubblicato ancora.</li>";
+      })
+      .catch(() => {
+        document.getElementById("gamesList").innerHTML = "<li>Impossibile caricare l'elenco.</li>";
+      });
+  </script>
 </body>
 </html>

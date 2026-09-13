@@ -1,0 +1,114 @@
+<!doctype html>
+<html lang="it">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Stampa QR squadre — Spell Game Engine</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcode/1.5.1/qrcode.min.js"></script>
+  <style>
+    body { font-family: system-ui, sans-serif; max-width: 900px; margin: 2rem auto; padding: 0 1rem; color: #1a1a2e; }
+    h1 { font-size: 1.3rem; }
+    fieldset { border: 1px solid #ddd; border-radius: 8px; margin: 1rem 0; padding: 0.75rem 1rem; }
+    label { display: block; font-size: 0.85rem; color: #555; margin-top: 0.5rem; }
+    input, button { font-size: 0.95rem; padding: 0.5rem; margin: 0.2rem 0.2rem 0.2rem 0; border-radius: 6px; border: 1px solid #ccc; }
+    button { background: #4338ca; color: white; border: none; cursor: pointer; font-weight: 600; }
+    #err { color: #b91c1c; }
+
+    .cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 1rem; margin-top: 1.5rem; }
+    .card {
+      border: 1px solid #ddd; border-radius: 12px; padding: 1.25rem 1rem; text-align: center;
+      break-inside: avoid; page-break-inside: avoid;
+    }
+    .card .name { font-weight: 700; font-size: 1.1rem; margin-bottom: 0.25rem; }
+    .card .code { font-family: monospace; font-size: 1.1rem; letter-spacing: 2px; color: #555; margin-top: 0.75rem; }
+    .card canvas { margin-top: 0.5rem; }
+
+    @media print {
+      .no-print { display: none !important; }
+      body { max-width: none; margin: 0; padding: 0.5cm; }
+      .cards { gap: 0.5cm; }
+      .card { border: 1px solid #999; }
+    }
+  </style>
+</head>
+<body>
+  <div class="no-print">
+    <h1>Stampa QR squadre</h1>
+    <p><a href="/control.html">← Torna alla Regia</a></p>
+
+    <fieldset>
+      <legend>Connessione</legend>
+      <label>Token regia</label>
+      <input id="token" placeholder="nick" />
+      <p id="err"></p>
+    </fieldset>
+
+    <button id="printBtn">🖨️ Stampa</button>
+  </div>
+
+  <h2 id="sessionTitle" class="no-print"></h2>
+  <div id="cards" class="cards"><p class="no-print">Inserisci il token per caricare le squadre.</p></div>
+
+  <script>
+    const sessionId = new URLSearchParams(location.search).get("sessionId");
+
+    function token() {
+      return document.getElementById("token").value.trim();
+    }
+
+    async function api(path) {
+      const res = await fetch(path, { headers: { Authorization: "Bearer " + token() } });
+      const body = await res.json();
+      if (!res.ok || !body.ok) throw new Error(body.error?.message || "Errore");
+      return body.data;
+    }
+
+    const savedToken = localStorage.getItem("spell_control_token");
+    if (savedToken) document.getElementById("token").value = savedToken;
+    document.getElementById("token").addEventListener("blur", () => {
+      localStorage.setItem("spell_control_token", token());
+      load();
+    });
+
+    async function load() {
+      const errEl = document.getElementById("err");
+      const cardsEl = document.getElementById("cards");
+      errEl.textContent = "";
+      if (!sessionId) {
+        errEl.textContent = "Nessuna sessione indicata (manca ?sessionId= nell'URL).";
+        return;
+      }
+      if (!token()) return;
+      try {
+        const d = await api(`/api/control/sessions/${sessionId}/dashboard`);
+        document.getElementById("sessionTitle").textContent = `Sessione: ${sessionId}`;
+        if (d.teams.length === 0) {
+          cardsEl.innerHTML = '<p class="no-print">Nessuna squadra in questa sessione.</p>';
+          return;
+        }
+        cardsEl.innerHTML = d.teams
+          .map(
+            (t) => `
+          <div class="card">
+            <div class="name">${t.name}</div>
+            <canvas id="qr-${t.teamId}"></canvas>
+            <div class="code">${t.accessCode}</div>
+          </div>`
+          )
+          .join("");
+        d.teams.forEach((t) => {
+          const canvas = document.getElementById(`qr-${t.teamId}`);
+          const url = `${location.origin}/team.html?code=${t.accessCode}`;
+          QRCode.toCanvas(canvas, url, { width: 160, margin: 1 }, () => {});
+        });
+      } catch (e) {
+        errEl.textContent = e.message;
+      }
+    }
+
+    document.getElementById("printBtn").addEventListener("click", () => window.print());
+
+    load();
+  </script>
+</body>
+</html>

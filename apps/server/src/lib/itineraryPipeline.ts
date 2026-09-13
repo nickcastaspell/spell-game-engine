@@ -726,6 +726,7 @@ export interface ItineraryTeamOverviewEntry {
   position: number;
   totalSteps: number;
   completed: boolean;
+  score: number;
   currentStep: { number: number; title: string; lat: number | null; lng: number | null } | null;
 }
 
@@ -757,6 +758,7 @@ export function getItineraryOverview(sessionId: string, phaseId: string): Itiner
       position,
       totalSteps: route.length,
       completed,
+      score: typeof state.score === "number" ? state.score : 0,
       currentStep: currentStepDef
         ? {
             number: currentStepDef.number,
@@ -765,6 +767,71 @@ export function getItineraryOverview(sessionId: string, phaseId: string): Itiner
             lng: typeof config?.lng === "number" ? config.lng : null,
           }
         : null,
+    };
+  });
+}
+
+export interface FacilitatorRouteStep {
+  number: number;
+  title: string | null;
+  lat: number | null;
+  lng: number | null;
+  status: "done" | "current" | "upcoming";
+  /** Esito registrato dal modulo (textMatch: {esito, risposta}; geoAnswer: {esito, distanzaMetri}); assente per tappe non ancora affrontate o senza log (start/voucher/finale). */
+  stepLog: Record<string, unknown> | null;
+}
+
+export interface FacilitatorTeamRoute {
+  teamId: string;
+  teamName: string;
+  position: number;
+  totalSteps: number;
+  completed: boolean;
+  steps: FacilitatorRouteStep[];
+}
+
+/**
+ * Percorso COMPLETO (tutte le tappe, non solo quella corrente) per le
+ * squadre indicate — pensato per il facilitatore (Fase 6): a differenza
+ * della mappa squadra (team.html) o dell'overview regia
+ * (getItineraryOverview sopra), qui non c'è motivo di nascondere le tappe
+ * future: il facilitatore non gioca, e vedere l'intero percorso (con
+ * l'esito di quelle già affrontate) è proprio il suo lavoro sul campo.
+ */
+export function getFacilitatorTeamRoutes(sessionId: string, phaseId: string, teamIds: string[]): FacilitatorTeamRoute[] {
+  const { steps } = loadItineraryStepsForPhase(sessionId, phaseId);
+  const stepsByNumber = new Map(steps.map((s) => [s.number, s]));
+
+  return teamIds.map((teamId) => {
+    const team = getTeam(teamId)!;
+    const teamStateRow = ensureTeamState(teamId);
+    const state = parseState(teamStateRow.state_json);
+    const sequence = Array.isArray(state.route) ? (state.route as number[]) : [];
+    const position = typeof state.position === "number" ? state.position : 1;
+    const completed = typeof state.itineraryCompletedAt === "string";
+    const stepLogAll = (state.stepLog as Record<string, unknown> | undefined) ?? {};
+
+    const stepsDetail: FacilitatorRouteStep[] = sequence.map((number, idx) => {
+      const step = stepsByNumber.get(number);
+      const config = step?.config as { lat?: unknown; lng?: unknown } | undefined;
+      const status: FacilitatorRouteStep["status"] = completed || idx < position - 1 ? "done" : idx === position - 1 ? "current" : "upcoming";
+      return {
+        number,
+        title: step?.title ?? null,
+        lat: typeof config?.lat === "number" ? config.lat : null,
+        lng: typeof config?.lng === "number" ? config.lng : null,
+        status,
+        stepLog: step ? ((stepLogAll[step.id] as Record<string, unknown> | undefined) ?? null) : null,
+      };
+    });
+
+    return {
+      teamId: team.id,
+      teamName: team.name,
+      position,
+      totalSteps: sequence.length,
+      completed,
+      steps: stepsDetail,
     };
   });
 }
