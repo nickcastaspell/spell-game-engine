@@ -90,6 +90,8 @@ export interface ItineraryStepContent {
   config: Record<string, unknown>;
   points: number;
   hint?: string;
+  /** Immagine mostrata insieme alla domanda (data URI, caricata dall'editor) — non è la foto-risposta di photoApproval, è materiale della domanda stessa (es. un indizio visivo al posto di coordinate esatte). */
+  image?: string;
   /** Se presente, tappa riservata a queste squadre (per team id); vuoto/assente = tappa per tutte. */
   groups?: string[];
   /** Raggruppamento usato dalla generazione percorsi per far ruotare le tappe a blocchi tra coppie di squadre. */

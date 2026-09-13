@@ -48,6 +48,7 @@
     .tappa-label { font-size: 11px; text-transform: uppercase; letter-spacing: .8px; color: var(--muted); }
     .tappa-title { font-family: 'Playfair Display', serif; font-size: 17px; font-weight: 700; line-height: 1.3; }
     .clue-box { background: var(--paper2); border: 1px solid var(--border); border-left: 4px solid var(--gold); border-radius: var(--radius); padding: 16px 18px; margin-bottom: 18px; font-size: 15px; line-height: 1.7; }
+    .tappa-image { display: block; width: 100%; border-radius: var(--radius); margin-bottom: 14px; }
 
     input[type="text"], input:not([type]), input[type="number"], input[type="file"], textarea { width: 100%; padding: 12px 14px; border: 1.5px solid var(--border); border-radius: var(--radius); background: white; font-family: 'DM Sans', sans-serif; font-size: 15px; color: var(--ink); outline: none; box-sizing: border-box; margin-bottom: 10px; }
     input:focus, textarea:focus { border-color: var(--gold); }
@@ -81,7 +82,7 @@
 
     #submitErr { color: var(--rust); font-size: 13px; margin: 0 0 8px; }
     #map { height: 240px; border-radius: var(--radius); margin-top: 4px; }
-    .hidden { display: none; }
+    .hidden { display: none !important; } /* vince su #login/#app che impostano display sull'ID (stesso fix già in facilitator.html) */
   </style>
 </head>
 <body>
@@ -336,6 +337,13 @@
         </div>`;
     }
 
+    // Immagine allegata alla domanda (es. un indizio visivo al posto di
+    // coordinate esatte) — non è la foto-risposta di photoApproval, quella
+    // resta un file input separato inviato dalla squadra.
+    function stepImageHtml(step) {
+      return step.image ? `<img class="tappa-image" src="${step.image}" alt="" />` : "";
+    }
+
     function renderItinerary(itin) {
       const el = document.getElementById("activity");
       renderItineraryMap(itin.route, itin.completed ? "__completed__" : itin.step.id);
@@ -359,7 +367,7 @@
           renderedItineraryStepId = step.id;
           submitItinerary(step.id, {});
         }
-        el.innerHTML = `${tappaHeader(progress, step.title)}<div class="clue-box">${step.body}</div><p><em>Invio in corso…</em></p>`;
+        el.innerHTML = `${tappaHeader(progress, step.title)}${stepImageHtml(step)}<div class="clue-box">${step.body}</div><p><em>Invio in corso…</em></p>`;
         return;
       }
 
@@ -373,6 +381,7 @@
       if (step.view.type === "textMatch") {
         el.innerHTML = `
           ${tappaHeader(progress, step.title)}
+          ${stepImageHtml(step)}
           <div class="clue-box">${step.body}</div>
           <input id="answerInput" placeholder="La tua risposta" autocomplete="off" />
           <button id="answerSubmitBtn" class="btn btn-primary">Invia risposta</button>
@@ -386,6 +395,7 @@
       } else if (step.view.type === "geoAnswer") {
         el.innerHTML = `
           ${tappaHeader(progress, step.title)}
+          ${stepImageHtml(step)}
           <div class="clue-box">${step.body}</div>
           <button id="geoDetectBtn" class="btn btn-gold">📍 Rileva posizione</button>
           <div id="geoManualFallback" class="hidden">
@@ -420,6 +430,7 @@
       } else if (step.view.type === "photoApproval") {
         el.innerHTML = `
           ${tappaHeader(progress, step.title)}
+          ${stepImageHtml(step)}
           <div class="clue-box">${step.body}</div>
           <input id="photoInput" type="file" accept="image/*" capture="environment" />
           <button id="photoSubmitBtn" class="btn btn-primary">Invia foto</button>
@@ -428,13 +439,14 @@
       } else if (step.view.type === "finale") {
         el.innerHTML = `
           ${tappaHeader(progress, step.title)}
+          ${stepImageHtml(step)}
           <div class="clue-box">${step.body}</div>
           ${lastVoucherToken ? `<div class="voucher-card"><div class="voucher-title">Buono ottenuto</div><div class="voucher-code">${lastVoucherToken}</div></div>` : ""}
           <button id="finaleBtn" class="btn btn-gold">Conferma arrivo</button>
           <p id="submitErr"></p>`;
         document.getElementById("finaleBtn").addEventListener("click", () => submitItinerary(step.id, {}));
       } else {
-        el.innerHTML = `${tappaHeader(progress, step.title)}<div class="clue-box">${step.body}</div><p>Tipo di tappa non supportato da questa interfaccia.</p>`;
+        el.innerHTML = `${tappaHeader(progress, step.title)}${stepImageHtml(step)}<div class="clue-box">${step.body}</div><p>Tipo di tappa non supportato da questa interfaccia.</p>`;
       }
 
       if (step.hasHint) {

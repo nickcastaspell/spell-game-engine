@@ -377,6 +377,12 @@
             <div class="detail-right">
               <label>Testo</label>
               <textarea data-field="body" data-idx="${idx}">${t.body ?? ""}</textarea>
+              <label style="margin-top:10px">Immagine domanda (opz.)</label>
+              <div class="field-row" style="align-items:center">
+                ${t.image ? `<img src="${t.image}" alt="" style="max-width:120px;max-height:80px;border-radius:6px;border:1px solid #ddd" />` : ""}
+                <input type="file" accept="image/*" data-image-upload="${idx}" />
+                ${t.image ? `<button type="button" class="secondary" data-image-remove="${idx}">✕ Rimuovi</button>` : ""}
+              </div>
             </div>
           </div>
         </div>`
@@ -405,6 +411,45 @@
       });
       box.querySelectorAll("[data-dup]").forEach((b) => b.addEventListener("click", () => duplicateTappa(Number(b.dataset.dup))));
       box.querySelectorAll("[data-remove]").forEach((b) => b.addEventListener("click", () => removeTappa(Number(b.dataset.remove))));
+      box.querySelectorAll("[data-image-upload]").forEach((input) => {
+        input.addEventListener("change", () => onImageUpload(input));
+      });
+      box.querySelectorAll("[data-image-remove]").forEach((b) => {
+        b.addEventListener("click", () => {
+          delete currentDraft.definition.content.tappe[Number(b.dataset.imageRemove)].image;
+          renderTappe();
+        });
+      });
+    }
+
+    // Immagine allegata alla domanda (non la foto-risposta di photoApproval,
+    // quella è un file inviato dalla squadra a runtime): qui è contenuto
+    // d'autore, salvato come data URI direttamente nella game definition —
+    // niente upload server-side, coerente con "zero dipendenze esterne" già
+    // seguito per QR/PDF. Ridimensionata lato client (max 1000px, JPEG) per
+    // non gonfiare a dismisura definition_json con foto scattate a piena
+    // risoluzione.
+    const MAX_IMAGE_DIMENSION = 1000;
+
+    function onImageUpload(input) {
+      const idx = Number(input.dataset.imageUpload);
+      const file = input.files && input.files[0];
+      if (!file) return;
+      const reader = new FileReader();
+      reader.onload = () => {
+        const img = new Image();
+        img.onload = () => {
+          const scale = Math.min(1, MAX_IMAGE_DIMENSION / Math.max(img.width, img.height));
+          const canvas = document.createElement("canvas");
+          canvas.width = Math.round(img.width * scale);
+          canvas.height = Math.round(img.height * scale);
+          canvas.getContext("2d").drawImage(img, 0, 0, canvas.width, canvas.height);
+          currentDraft.definition.content.tappe[idx].image = canvas.toDataURL("image/jpeg", 0.82);
+          renderTappe();
+        };
+        img.src = reader.result;
+      };
+      reader.readAsDataURL(file);
     }
 
     function onFieldInput(el) {

@@ -193,6 +193,7 @@ export function getItineraryStatus(sessionId: string, teamId: string, phaseId: s
       id: step.id,
       title: step.title,
       body: step.body,
+      image: step.image ?? null,
       view,
       hasHint: Boolean(step.hint) && !hintsUsed[step.id],
     },

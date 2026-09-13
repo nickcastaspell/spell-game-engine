@@ -381,19 +381,11 @@ function validateItinerarySemantics(
     issues.push(`content.${stepsSource}: nessuna tappa di tipo "finale" — l'itinerario non avrebbe una fine`);
   }
 
-  // "guida" qui è config.kind (vedi itineraryRouting.ts:stepConstraintKind),
-  // non ItineraryStepContent.type — quest'ultimo è il modulo motore
-  // (es. "textMatch"), non la distinzione testo/guida/qr dell'originale.
-  const hasGuidaStep = steps.some((raw) => {
-    const step = raw as Record<string, unknown>;
-    const config = step.config as Record<string, unknown> | undefined;
-    return config?.kind === "guida";
-  });
-  if (phase.itinerary.routing.minGuideDistance !== undefined && !hasGuidaStep) {
-    issues.push(
-      `${formatPath([...phasePath, "itinerary", "routing", "minGuideDistance"])}: impostato ma nessuna tappa con config.kind "guida" è presente`
-    );
-  }
+  // Oltre a "finale" (sopra), nessun altro vincolo di contenuto è
+  // obbligatorio per pubblicare: minGuideDistance senza tappe "guida" è
+  // semplicemente un parametro di routing inutilizzato (itineraryRouting.ts
+  // lo applica solo se ci sono tappe "guida" da distanziare), non un errore
+  // — richiesta esplicita di non forzare configurazioni facoltative.
 
   return issues;
 }

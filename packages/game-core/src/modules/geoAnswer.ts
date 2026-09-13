@@ -12,13 +12,18 @@ import { haversineMeters } from "../itineraryRouting";
  * Stesso comportamento di textMatch.ts per un tentativo sbagliato: resta
  * registrato come submission ma non fa avanzare né assegna punti, la
  * squadra può riprovare subito.
+ *
+ * lat/lng sono facoltativi (nessun obbligo di tappa oltre a inizio/fine,
+ * per richiesta esplicita): se assenti non c'è un punto atteso da
+ * verificare, quindi qualunque posizione inviata viene accettata — la
+ * tappa diventa di fatto un "check-in libero" (vedi applyRules).
  */
 
 const DEFAULT_TOLERANCE_METERS = 40;
 
 interface GeoAnswerConfig {
-  lat: number;
-  lng: number;
+  lat?: number;
+  lng?: number;
   toleranceMeters?: number;
   points?: number;
 }
@@ -27,14 +32,18 @@ function getConfig(ctx: ModuleContext): GeoAnswerConfig {
   return ctx.activityConfig as unknown as GeoAnswerConfig;
 }
 
+function hasTarget(config: GeoAnswerConfig): boolean {
+  return typeof config.lat === "number" && typeof config.lng === "number";
+}
+
 export const geoAnswerModule: GameModule = {
   type: "geoAnswer",
 
   validateConfig(config): ValidationResult {
     const c = config as unknown as GeoAnswerConfig;
     const errors: string[] = [];
-    if (typeof c.lat !== "number" || typeof c.lng !== "number") {
-      errors.push("lat/lng mancanti o non numerici");
+    if ((c.lat !== undefined && typeof c.lat !== "number") || (c.lng !== undefined && typeof c.lng !== "number")) {
+      errors.push("lat/lng, se presenti, devono essere numerici");
     }
     if (c.toleranceMeters !== undefined && !(c.toleranceMeters > 0)) {
       errors.push("toleranceMeters deve essere un numero positivo se presente");
@@ -59,8 +68,10 @@ export const geoAnswerModule: GameModule = {
     const config = getConfig(ctx);
     const { lat, lng } = payload as { lat: number; lng: number };
     const tolerance = config.toleranceMeters ?? DEFAULT_TOLERANCE_METERS;
-    const distanza = haversineMeters({ lat, lng }, { lat: config.lat, lng: config.lng });
-    const corretta = distanza <= tolerance;
+    // Nessun punto atteso in config: tappa "check-in libero", qualunque
+    // posizione inviata è accettata (vedi nota sopra hasTarget).
+    const distanza = hasTarget(config) ? haversineMeters({ lat, lng }, { lat: config.lat!, lng: config.lng! }) : 0;
+    const corretta = hasTarget(config) ? distanza <= tolerance : true;
     const effects: Effect[] = [];
 
     effects.push({

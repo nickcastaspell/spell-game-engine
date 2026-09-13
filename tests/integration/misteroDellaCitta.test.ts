@@ -82,6 +82,26 @@ describe("game definition reale: struttura e semantica", () => {
     expect(() => validateGameDefinitionSemantics(def, moduleRegistry)).not.toThrow();
   });
 
+  it("non richiede più coordinate su una tappa geoAnswer né una tappa 'guida' se minGuideDistance è impostato (nessun obbligo oltre a inizio/fine)", () => {
+    const def = validateGameDefinition(rawParsed);
+    // minGuideDistance impostato ma NESSUNA tappa "guida" (config.kind rimosso
+    // da tutte) e una tappa geoAnswer SENZA lat/lng: prima di questa modifica
+    // entrambe le condizioni bloccavano la pubblicazione.
+    const phase = { ...def.phases[0], itinerary: { ...def.phases[0].itinerary!, routing: { minGuideDistance: 3 } } };
+    const tappe = (def.content as { tappe: Array<Record<string, unknown>> }).tappe.map((t) => {
+      const config = { ...(t.config as Record<string, unknown>) };
+      delete config.kind;
+      if (t.type === "geoAnswer") {
+        delete config.lat;
+        delete config.lng;
+      }
+      return { ...t, config };
+    });
+    expect(tappe.some((t) => (t.config as Record<string, unknown>).kind === "guida")).toBe(false);
+    const bad = { ...def, phases: [phase, ...def.phases.slice(1)], content: { ...def.content, tappe } };
+    expect(() => validateGameDefinitionSemantics(bad, moduleRegistry)).not.toThrow();
+  });
+
   it("contiene esattamente 35 tappe reali, con i conteggi per tipo attesi", () => {
     const steps = rawParsed.content.tappe as Array<{ type: string; config: Record<string, unknown> }>;
     expect(steps).toHaveLength(35);
