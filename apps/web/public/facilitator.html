@@ -198,13 +198,6 @@
     function colorForIndex(i) {
       return TEAM_COLORS[i % TEAM_COLORS.length];
     }
-    // Versione "spenta" dello stesso colore (tappe già fatte): sfuma verso
-    // il grigio di sfondo invece di usare un secondo colore per squadra.
-    function mutedColor(hex) {
-      const n = parseInt(hex.slice(1), 16);
-      const r = (n >> 16) & 255, g = (n >> 8) & 255, b = n & 255;
-      return `rgb(${Math.round(r * 0.4 + 45)}, ${Math.round(g * 0.4 + 45)}, ${Math.round(b * 0.4 + 45)})`;
-    }
 
     function token() {
       return document.getElementById("token").value.trim();
@@ -372,6 +365,10 @@
         .catch(() => {});
     }
 
+    // Solo la posizione ATTUALE di ogni squadra, un colore diverso per
+    // squadra — niente percorso/linee/tappe fatte: con più squadre la
+    // mappa con l'intero percorso di ognuna era illeggibile (richiesta
+    // esplicita di ripartire da zero e mostrare solo "chi è dove ora").
     function renderMap(routes) {
       if (!facMap) {
         facMap = L.map("facMap").setView([44.4949, 11.3426], 15);
@@ -383,26 +380,20 @@
       const allCoords = [];
       routes.forEach((r, i) => {
         const color = colorForIndex(i);
-        const withCoords = r.steps.filter((s) => typeof s.lat === "number" && typeof s.lng === "number");
-        if (withCoords.length === 0) return;
+        const current = r.steps.find((s) => s.status === "current" && typeof s.lat === "number" && typeof s.lng === "number");
+        if (!current) return;
 
-        // Linea che collega le tappe nell'ordine del percorso.
-        L.polyline(withCoords.map((s) => [s.lat, s.lng]), { color, weight: 2, opacity: 0.5 }).addTo(facMarkersLayer);
-
-        withCoords.forEach((s) => {
-          const isCurrent = s.status === "current";
-          const marker = L.circleMarker([s.lat, s.lng], {
-            radius: isCurrent ? 9 : 6,
-            color: s.status === "done" ? mutedColor(color) : color,
-            fillColor: s.status === "done" ? mutedColor(color) : color,
-            fillOpacity: isCurrent ? 0.95 : 0.7,
-            weight: isCurrent ? 3 : 1.5,
-          });
-          marker.bindTooltip(`${r.teamName} — ${s.number}. ${s.title || ""}`);
-          marker.on("click", () => openDetail(r.teamId));
-          marker.addTo(facMarkersLayer);
-          allCoords.push([s.lat, s.lng]);
+        const marker = L.circleMarker([current.lat, current.lng], {
+          radius: 10,
+          color,
+          fillColor: color,
+          fillOpacity: 0.9,
+          weight: 3,
         });
+        marker.bindTooltip(`${r.teamName} — ${current.number}. ${current.title || ""}`);
+        marker.on("click", () => openDetail(r.teamId));
+        marker.addTo(facMarkersLayer);
+        allCoords.push([current.lat, current.lng]);
       });
       facMarkersLayer.addTo(facMap);
       if (allCoords.length > 0) facMap.fitBounds(allCoords, { padding: [40, 40], maxZoom: 17 });
