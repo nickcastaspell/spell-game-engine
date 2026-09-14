@@ -199,6 +199,27 @@
       return body.data;
     }
 
+    // Le foto sono dietro token regia (controlAuth) come tutto il resto:
+    // un semplice <img src="..."> non può portare l'header Authorization,
+    // quindi arriverebbe sempre un 401 e la miniatura restava vuota. Si
+    // scarica il file autenticati via fetch() e si assegna all'<img> un
+    // blob URL locale.
+    async function loadAuthedImages(container) {
+      const imgs = container.querySelectorAll("img[data-src]");
+      await Promise.all(
+        Array.from(imgs).map(async (img) => {
+          try {
+            const res = await fetch(img.dataset.src, { headers: { Authorization: "Bearer " + token() } });
+            if (!res.ok) throw new Error("foto non disponibile");
+            const blob = await res.blob();
+            img.src = URL.createObjectURL(blob);
+          } catch {
+            img.style.display = "none";
+          }
+        })
+      );
+    }
+
     // Feedback visivo su un bottone mentre la sua azione (di solito una
     // chiamata api()) è in corso: disabilitato + testo "⏳…", ripristinato
     // alla fine (successo o errore) — l'errore stesso resta gestito da chi
@@ -752,13 +773,13 @@
           .map(
             (p) => `
           <div style="width:8rem">
-            <img src="/api/control/sessions/${sid}/itinerary/photos/${p.id}/image" alt="foto"
-                 style="width:8rem; height:8rem; object-fit:cover; border-radius:6px; border:1px solid #ddd"
-                 onerror="this.style.display='none'" />
+            <img data-src="/api/control/sessions/${sid}/itinerary/photos/${p.id}/image" alt="foto"
+                 style="width:8rem; height:8rem; object-fit:cover; border-radius:6px; border:1px solid #ddd" />
             <p style="font-size:0.75rem; margin:0.2rem 0 0"><strong>${p.teamName}</strong><br/>${statusLabel[p.status] ?? p.status} (tentativo ${p.attempt})</p>
           </div>`
           )
           .join("")}</div>`;
+        loadAuthedImages(box);
       } catch (e) {
         box.innerHTML = `<p id="err">${e.message}</p>`;
       }
@@ -814,15 +835,15 @@
           .map(
             (p) => `
           <div class="row" style="border-bottom:1px solid #eee; padding:0.5rem 0;">
-            <img src="/api/control/sessions/${sid}/itinerary/photos/${p.id}/image" alt="foto"
-                 style="width:5rem; height:5rem; object-fit:cover; border-radius:6px; border:1px solid #ddd"
-                 onerror="this.style.display='none'" />
+            <img data-src="/api/control/sessions/${sid}/itinerary/photos/${p.id}/image" alt="foto"
+                 style="width:5rem; height:5rem; object-fit:cover; border-radius:6px; border:1px solid #ddd" />
             <span><strong>${p.teamName}</strong> — tappa ${p.stepId} (tentativo ${p.attempt})</span>
             <button onclick="withFeedback(this, () => decidePhoto('${p.id}', 'approved'))">✅ Approva</button>
             <button class="danger" onclick="withFeedback(this, () => decidePhoto('${p.id}', 'rejected'))">❌ Rigetta</button>
           </div>`
           )
           .join("");
+        loadAuthedImages(box);
       } catch (e) {
         box.innerHTML = `<p id="err">${e.message}</p>`;
       }

@@ -220,6 +220,28 @@
       return body.data;
     }
 
+    // Le foto sono dietro token facilitatore (facilitatorAuth) come tutto
+    // il resto: un semplice <img src="..."> non può portare l'header
+    // Authorization, quindi arriverebbe sempre un 401 (bug reale: l'alert
+    // "nuova foto" funziona perché usa api(), ma la miniatura risultava
+    // sempre vuota). Si scarica il file autenticati via fetch() e si
+    // assegna all'<img> un blob URL locale.
+    async function loadAuthedImages(container) {
+      const imgs = container.querySelectorAll("img[data-src]");
+      await Promise.all(
+        Array.from(imgs).map(async (img) => {
+          try {
+            const res = await fetch(img.dataset.src, { headers: { Authorization: "Bearer " + token() } });
+            if (!res.ok) throw new Error("foto non disponibile");
+            const blob = await res.blob();
+            img.src = URL.createObjectURL(blob);
+          } catch {
+            img.style.display = "none";
+          }
+        })
+      );
+    }
+
     // Stesso helper di control.html/editor.html: feedback visivo "⏳…" +
     // disabilitato mentre l'azione del bottone è in corso.
     async function withFeedback(button, fn) {
@@ -466,7 +488,7 @@
           .map(
             (p) => `
           <div class="foto-card attesa">
-            <img class="foto-thumb" src="/api/facilitator/photos/${p.id}/image" alt="foto" onerror="this.style.display='none'" />
+            <img class="foto-thumb" data-src="/api/facilitator/photos/${p.id}/image" alt="foto" />
             <div class="foto-meta">
               <div class="foto-squad">${p.teamName}</div>
               <div class="foto-detail">tappa ${p.stepId} · tentativo ${p.attempt}</div>
@@ -478,6 +500,7 @@
           </div>`
           )
           .join("")}</div>`;
+        loadAuthedImages(box);
       } catch (e) {
         box.innerHTML = `<p id="err">${e.message}</p>`;
       }
@@ -544,7 +567,7 @@
           .map(
             (p) => `
           <div class="foto-card ${statusClass[p.status] ?? ""}">
-            <img class="foto-thumb" src="/api/facilitator/photos/${p.id}/image" alt="foto" onerror="this.style.display='none'" />
+            <img class="foto-thumb" data-src="/api/facilitator/photos/${p.id}/image" alt="foto" />
             <div class="foto-meta">
               <div class="foto-squad">${p.teamName}</div>
               <div class="foto-detail">${statusLabel[p.status] ?? p.status} · tentativo ${p.attempt}</div>
@@ -552,6 +575,7 @@
           </div>`
           )
           .join("")}</div>`;
+        loadAuthedImages(box);
       } catch (e) {
         box.innerHTML = `<p id="err">${e.message}</p>`;
       }
