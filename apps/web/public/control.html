@@ -23,6 +23,7 @@
     .dot.on { background: #22c55e; }
     .dot.off { background: #d1d5db; }
     #err { color: #b91c1c; }
+    #versionTag { color: #888; font-size: 0.78rem; font-family: monospace; margin: -0.4rem 0 0.8rem; }
     .row { display: flex; gap: 0.5rem; flex-wrap: wrap; align-items: center; }
     /* Elementi visibili SOLO se il backend espone /api/dev/* (ambiente non-production, vedi app.ts) */
     .dev-only { display: none; }
@@ -38,6 +39,7 @@
   <div id="devBanner">⚠ Development Mode — reset, duplicazione ed eliminazione sessioni sono attivi. Non sono disponibili in produzione.</div>
 
   <h1>Regia</h1>
+  <p id="versionTag">Caricamento versione…</p>
   <p><a href="/editor.html">✏️ Editor caccia (crea/modifica città e tappe)</a></p>
 
   <fieldset>
@@ -161,6 +163,27 @@
     function token() {
       return document.getElementById("token").value.trim();
     }
+
+    // Rev del deploy attivo (commit + messaggio) — pubblico, nessun token
+    // richiesto, per verificare a colpo d'occhio che l'aggiornamento atteso
+    // sia davvero quello in esecuzione (vedi cronologia: un deploy Railway
+    // può restare "SKIPPED" senza errori visibili altrove).
+    (async function loadVersion() {
+      const el = document.getElementById("versionTag");
+      try {
+        const res = await fetch("/api/version");
+        const body = await res.json();
+        const v = body.data;
+        if (!v.commit) {
+          el.textContent = "";
+          return;
+        }
+        el.textContent = `rev ${v.commitShort}${v.message ? " · " + v.message : ""}`;
+        el.title = v.commit;
+      } catch {
+        el.textContent = "";
+      }
+    })();
 
     async function api(path, opts = {}) {
       const res = await fetch(path, {

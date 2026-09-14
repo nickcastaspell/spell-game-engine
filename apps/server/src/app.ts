@@ -6,6 +6,7 @@ import express from "express";
 import path from "node:path";
 import { asyncRoute, requestIdMiddleware, sendErr, sendOk } from "./lib/response";
 import { listGames } from "./lib/repo";
+import { appVersion } from "./lib/version";
 import { controlRouter } from "./routes/control";
 import { authoringRouter } from "./routes/authoring";
 import { teamRouter } from "./routes/team";
@@ -35,6 +36,17 @@ export function createApp() {
     "/api/games",
     asyncRoute(async (_req, res) => {
       sendOk(res, listGames().map((g) => ({ slug: g.slug, name: g.name })));
+    })
+  );
+
+  // GET /api/version — pubblico, nessun dato sensibile: commit e messaggio
+  // dell'ultimo deploy, per verificare a colpo d'occhio in Regia che
+  // l'aggiornamento atteso sia davvero quello attivo (vedi cronologia: un
+  // deploy Railway può restare "SKIPPED" senza errori visibili altrove).
+  app.get(
+    "/api/version",
+    asyncRoute(async (_req, res) => {
+      sendOk(res, appVersion);
     })
   );
 
