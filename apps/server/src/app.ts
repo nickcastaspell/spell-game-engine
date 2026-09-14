@@ -17,7 +17,13 @@ import { isDevEnvironment } from "./lib/devMode";
 // possono montarla su una porta effimera senza duplicare la configurazione.
 export function createApp() {
   const app = express();
-  app.use(express.json());
+  // Limite alzato da 100kb (default Express) a 15mb: le tappe "photoApproval"
+  // inviano la foto come base64 nel body JSON (team.html, submitPhoto) — una
+  // normale foto da smartphone supera facilmente 100kb, il default avrebbe
+  // fatto rifiutare ogni invio con un 413 (bug reale: "Unexpected token '<'"
+  // lato client, perché senza il gestore errori sotto quel 413 arrivava come
+  // pagina HTML di Express, non come JSON).
+  app.use(express.json({ limit: "15mb" }));
   app.use(requestIdMiddleware);
 
   // GET /api/games — pubblico, nessun token: nome/slug dei giochi
@@ -49,6 +55,24 @@ export function createApp() {
 
   app.use((_req, res) => {
     sendErr(res, 404, "not_found", "Risorsa non trovata");
+  });
+
+  // Gestore d'errore generico: senza questo, un errore sollevato PRIMA di
+  // arrivare a un route handler (es. express.json() su un body oltre il
+  // limite, o malformato) passa al gestore d'errore DI DEFAULT di Express,
+  // che risponde con una pagina HTML — il client (team.html) si aspetta
+  // sempre JSON e fallisce con un errore di parsing invece di mostrare il
+  // messaggio vero (bug reale: upload foto oltre 100kb, vedi il limit sopra).
+  // asyncRoute già gestisce gli errori DENTRO ai route handler: questo
+  // copre il resto della pipeline.
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  app.use((err: Error & { status?: number; statusCode?: number }, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
+    const status = err.status ?? err.statusCode ?? 500;
+    if (status >= 500) {
+      // eslint-disable-next-line no-console
+      console.error(err);
+    }
+    sendErr(res, status, "request_error", err.message || "Errore nella richiesta");
   });
 
   return app;
