@@ -128,7 +128,9 @@
       });
       const body = await res.json();
       if (!res.ok || !body.ok) {
-        throw new Error(body.error?.message || "Errore");
+        const err = new Error(body.error?.message || "Errore");
+        err.code = body.error?.code; // vedi poll(): distingue "non è itinerary" da un errore qualunque
+        throw err;
       }
       return body.data;
     }
@@ -207,15 +209,27 @@
         }
 
         if (!state.activity && state.currentPhaseId) {
+          let itin;
           try {
-            const itin = await api("/api/team/itinerary/status");
+            itin = await api("/api/team/itinerary/status");
+          } catch (e) {
+            if (e.code === "not_itinerary_phase" || e.code === "no_current_phase") {
+              // davvero non è una fase itinerary per questa sessione: rendering normale sotto
+            } else {
+              // errore di rete/server transitorio (frequente sul campo, in
+              // mezzo alla città con connessione mobile instabile): meglio
+              // non toccare l'interfaccia — che mostrerebbe un messaggio
+              // sbagliato e permanente ("nessuna attività") — che aspettare
+              // il prossimo poll (4s), che riprova da solo.
+              return;
+            }
+          }
+          if (itin) {
             document.getElementById("statusBadge").textContent = "In percorso";
             document.getElementById("statusBadge").className = "badge open";
             document.getElementById("status").textContent = `${itin.score} pt`;
             renderItinerary(itin);
             return;
-          } catch (e) {
-            // non è una fase itinerary (400) o nessuna fase corrente (409): rendering normale sotto
           }
         }
         renderState(state);
