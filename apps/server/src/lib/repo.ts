@@ -94,6 +94,27 @@ export function listGames(): GameRow[] {
   return db.prepare("SELECT * FROM game ORDER BY name ASC").all() as unknown as GameRow[];
 }
 
+/** Numero di versioni pubblicate e di sessioni per gioco (elenco cacce nell'Editor). */
+export function listGameStats(): { game_id: string; versions: number; sessions: number }[] {
+  return db
+    .prepare(
+      `SELECT gv.game_id as game_id, COUNT(DISTINCT gv.id) as versions, COUNT(s.id) as sessions
+       FROM game_version gv LEFT JOIN session s ON s.game_version_id = gv.id
+       GROUP BY gv.game_id`
+    )
+    .all() as unknown as { game_id: string; versions: number; sessions: number }[];
+}
+
+export function listSessionIdsForGame(gameId: string): string[] {
+  return (
+    db
+      .prepare(
+        `SELECT s.id as id FROM session s JOIN game_version gv ON gv.id = s.game_version_id WHERE gv.game_id = ?`
+      )
+      .all(gameId) as { id: string }[]
+  ).map((r) => r.id);
+}
+
 export function upsertGame(slug: string, name: string): GameRow {
   const existing = db.prepare("SELECT * FROM game WHERE slug = ?").get(slug) as unknown as GameRow;
   if (existing) {
@@ -653,6 +674,23 @@ export function deleteSessionCascade(sessionId: string): void {
     db.prepare("DELETE FROM team WHERE session_id = ?").run(sessionId);
     db.prepare("DELETE FROM session WHERE id = ?").run(sessionId);
   });
+}
+
+/**
+ * Elimina una caccia pubblicata: prima le sue sessioni (ognuna con la
+ * propria cascata, vedi deleteSessionCascade, che ha già una transazione
+ * propria — non annidabile), poi le game_version e il gioco. Le bozze
+ * (game_draft) restano: sono un'altra cosa e si eliminano dall'Editor.
+ * Ritorna quante sessioni sono state eliminate.
+ */
+export function deleteGameCascade(gameId: string): number {
+  const sessionIds = listSessionIdsForGame(gameId);
+  for (const id of sessionIds) deleteSessionCascade(id);
+  transaction(() => {
+    db.prepare("DELETE FROM game_version WHERE game_id = ?").run(gameId);
+    db.prepare("DELETE FROM game WHERE id = ?").run(gameId);
+  });
+  return sessionIds.length;
 }
 
 /**

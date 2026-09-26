@@ -21,12 +21,14 @@ import {
   setTeamRoute,
 } from "../lib/itineraryPipeline";
 import { newFacilitatorToken } from "../lib/tokens";
+import { gameKindFromDefinition, type GameKind } from "../lib/gameKind";
 import {
   countTeams,
   createAuditEvent,
   createFacilitator,
   createSession,
   createTeam,
+  deleteGameCascade,
   deleteSessionCascade,
   ensureTeamState,
   getGameBySlug,
@@ -39,6 +41,7 @@ import {
   listActiveDeviceSessionsForTeams,
   listAllSessionsWithMeta,
   listFacilitators,
+  listGameStats,
   listGames,
   listPendingPhotos,
   listPhotosForSession,
@@ -70,12 +73,67 @@ export function toSessionView(session: SessionRow) {
   };
 }
 
-// GET /api/control/games — elenco dei giochi pubblicati, per il selettore
-// "1. Crea sessione" (prima bisognava sapere a memoria lo slug esatto).
+// Tipo di ogni gioco pubblicato (dalla sua ultima versione), per slug.
+function gameKindsBySlug(): Map<string, GameKind> {
+  const kinds = new Map<string, GameKind>();
+  for (const g of listGames()) {
+    const latest = getLatestGameVersion(g.id);
+    kinds.set(g.slug, latest ? gameKindFromDefinition(latest.definition_json) : "other");
+  }
+  return kinds;
+}
+
+// GET /api/control/games — elenco delle cacce pubblicate: per il selettore
+// "1. Crea sessione" in Regia e per l'elenco "Cacce pubblicate" nell'Editor.
+// "type" (itinerary = "Il mistero di…", pump, other) permette a entrambi di
+// concentrarsi sulle cacce itinerary; versions/sessions servono
+// all'Editor per avvisare prima di eliminare.
 controlRouter.get(
   "/games",
   asyncRoute(async (_req, res) => {
-    sendOk(res, listGames().map((g) => ({ slug: g.slug, name: g.name })));
+    const kinds = gameKindsBySlug();
+    const stats = new Map(listGameStats().map((s) => [s.game_id, s]));
+    sendOk(
+      res,
+      listGames().map((g) => ({
+        slug: g.slug,
+        name: g.name,
+        type: kinds.get(g.slug) ?? "other",
+        versions: stats.get(g.id)?.versions ?? 0,
+        sessions: stats.get(g.id)?.sessions ?? 0,
+      }))
+    );
+  })
+);
+
+// DELETE /api/control/games/:slug[?withSessions=true] — elimina una caccia
+// pubblicata (tutte le sue versioni). Se ha sessioni si rifiuta, a meno che
+// il client non confermi esplicitamente con withSessions=true: in quel caso
+// vengono eliminate anche loro (con la solita cascata). Le bozze restano.
+controlRouter.delete(
+  "/games/:slug",
+  asyncRoute(async (req, res) => {
+    const game = getGameBySlug(req.params.slug);
+    if (!game) throw new ApiError(404, "game_not_found", `Caccia "${req.params.slug}" non trovata`);
+
+    const sessions = listGameStats().find((s) => s.game_id === game.id)?.sessions ?? 0;
+    if (sessions > 0 && req.query.withSessions !== "true") {
+      throw new ApiError(
+        409,
+        "game_has_sessions",
+        `Questa caccia ha ${sessions} session${sessions === 1 ? "e" : "i"}: eliminale prima o conferma l'eliminazione insieme alla caccia.`
+      );
+    }
+
+    const sessionsDeleted = deleteGameCascade(game.id);
+    createAuditEvent({
+      actorType: "control",
+      actorId: "regia",
+      sessionId: null,
+      action: "game.deleted",
+      payloadJson: JSON.stringify({ slug: game.slug, sessionsDeleted }),
+    });
+    sendOk(res, { deleted: true, slug: game.slug, sessionsDeleted });
   })
 );
 
@@ -91,12 +149,14 @@ controlRouter.get(
   "/sessions",
   asyncRoute(async (_req, res) => {
     const rows = listAllSessionsWithMeta();
+    const kinds = gameKindsBySlug();
     sendOk(
       res,
       rows.map((r) => ({
         ...toSessionView(r),
         gameName: r.game_name,
         gameSlug: r.game_slug,
+        gameType: kinds.get(r.game_slug) ?? "other",
         teamCount: r.team_count,
       }))
     );

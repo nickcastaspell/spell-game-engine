@@ -83,15 +83,26 @@
   </fieldset>
 
   <fieldset>
+    <legend>Cacce pubblicate («Il mistero di…»)</legend>
+    <p style="margin:0.2rem 0; font-size:0.85rem; color:#666">Le cacce disponibili in Regia per creare sessioni. Eliminare una caccia elimina le sue versioni (e, dopo conferma, le sue sessioni); le bozze non vengono toccate.</p>
+    <div id="gamesList"><p>Caricamento…</p></div>
+  </fieldset>
+
+  <fieldset>
+    <legend>Sessioni delle cacce «Il mistero di…»</legend>
+    <div id="sessionsList"><p>Caricamento…</p></div>
+  </fieldset>
+
+  <fieldset>
     <legend>Bozze</legend>
-    <button id="reloadDraftsBtn" class="secondary" style="width:auto">🔄 Aggiorna elenco bozze</button>
+    <button id="reloadDraftsBtn" class="secondary" style="width:auto">🔄 Aggiorna elenchi</button>
     <div id="draftsList"><p>Caricamento…</p></div>
 
     <h4>Nuova bozza</h4>
     <div class="row">
       <div><label>Slug (id univoco, es. "mistero-milano")</label><input id="newSlug" /></div>
       <div><label>Nome città/caccia</label><input id="newName" /></div>
-      <div><label>Parti da (slug di un gioco già pubblicato, opzionale)</label><input id="newBasedOn" placeholder="il-mistero-della-citta" /></div>
+      <div><label>Parti da (una caccia già pubblicata, opzionale)</label><select id="newBasedOn" style="min-width:16rem"><option value="">— nessuna: bozza vuota —</option></select></div>
       <button id="createDraftBtn" style="align-self:flex-end">Crea bozza</button>
     </div>
     <p id="createErr" style="color:#b91c1c"></p>
@@ -198,15 +209,135 @@
             <span style="min-width:14rem"><strong>${d.name}</strong> <small>(${d.slug})</small></span>
             <span><small>${d.definition.content.tappe.length} tappe</small></span>
             <button data-open-draft="${d.id}">Apri</button>
+            <button class="danger" data-delete-draft="${d.id}" data-draft-name="${d.name.replace(/"/g, "&quot;")}">Elimina</button>
           </div>`
           )
           .join("");
         box.querySelectorAll("[data-open-draft]").forEach((b) => {
           b.addEventListener("click", () => withFeedback(b, () => openDraft(b.dataset.openDraft)));
         });
+        box.querySelectorAll("[data-delete-draft]").forEach((b) => {
+          b.addEventListener("click", () => withFeedback(b, () => deleteDraftById(b.dataset.deleteDraft, b.dataset.draftName)));
+        });
       } catch (e) {
         box.innerHTML = `<p id="err">${e.message}</p>`;
       }
+    }
+
+    // Cacce pubblicate: tutte quelle "Il mistero di…" prodotte finora, con
+    // versioni e sessioni; alimentano anche il menu "Parti da" (prima si
+    // scriveva lo slug a mano).
+    let publishedGames = [];
+
+    async function loadPublishedGames() {
+      const box = document.getElementById("gamesList");
+      const select = document.getElementById("newBasedOn");
+      try {
+        publishedGames = (await api("/api/control/games")).filter((g) => g.type === "itinerary");
+        const previous = select.value;
+        select.innerHTML =
+          `<option value="">— nessuna: bozza vuota —</option>` +
+          publishedGames.map((g) => `<option value="${g.slug}">${g.name} (${g.slug})</option>`).join("");
+        if (publishedGames.some((g) => g.slug === previous)) select.value = previous;
+
+        if (publishedGames.length === 0) {
+          box.innerHTML = "<p>Nessuna caccia pubblicata.</p>";
+          return;
+        }
+        box.innerHTML = publishedGames
+          .map(
+            (g) => `
+          <div class="row" style="border-bottom:1px solid #eee; padding:0.4rem 0;">
+            <span style="min-width:14rem"><strong>${g.name}</strong> <small>(${g.slug})</small></span>
+            <span><small>${g.versions} vers. · ${g.sessions} sessioni</small></span>
+            <button class="danger" data-delete-game="${g.slug}">Elimina</button>
+          </div>`
+          )
+          .join("");
+        box.querySelectorAll("[data-delete-game]").forEach((b) => {
+          b.addEventListener("click", () => withFeedback(b, () => deleteGame(b.dataset.deleteGame)));
+        });
+      } catch (e) {
+        box.innerHTML = `<p id="err">${e.message}</p>`;
+      }
+    }
+
+    async function deleteGame(slug) {
+      const g = publishedGames.find((x) => x.slug === slug);
+      if (!g) return;
+      const message =
+        g.sessions > 0
+          ? `La caccia "${g.name}" ha ${g.sessions} session${g.sessions === 1 ? "e" : "i"}: verranno eliminate anche loro (squadre, foto, punteggi). Eliminare definitivamente?`
+          : `Eliminare definitivamente la caccia "${g.name}" (${g.versions} version${g.versions === 1 ? "e" : "i"})? Le bozze non vengono toccate.`;
+      if (!confirm(message)) return;
+      try {
+        await api(`/api/control/games/${encodeURIComponent(slug)}${g.sessions > 0 ? "?withSessions=true" : ""}`, {
+          method: "DELETE",
+        });
+      } catch (e) {
+        alert(e.message);
+      }
+      refreshLists();
+    }
+
+    // Sessioni delle sole cacce "Il mistero di…" (stesso elenco della Regia,
+    // filtrato): qui per dare un colpo d'occhio e fare pulizia.
+    async function loadSessionsList() {
+      const box = document.getElementById("sessionsList");
+      try {
+        const sessions = (await api("/api/control/sessions")).filter((s) => s.gameType === "itinerary");
+        if (sessions.length === 0) {
+          box.innerHTML = "<p>Nessuna sessione.</p>";
+          return;
+        }
+        box.innerHTML = sessions
+          .map(
+            (s) => `
+          <div class="row" style="border-bottom:1px solid #eee; padding:0.4rem 0;">
+            <span style="min-width:14rem"><strong>${s.name}</strong> <small>(${s.gameName})</small></span>
+            <span>${s.status}</span>
+            <span><small>${s.createdAt}</small></span>
+            <span>${s.teamCount} squadre</span>
+            <button class="danger" data-delete-session="${s.id}" data-session-name="${s.name.replace(/"/g, "&quot;")}">Elimina</button>
+          </div>`
+          )
+          .join("");
+        box.querySelectorAll("[data-delete-session]").forEach((b) => {
+          b.addEventListener("click", () => withFeedback(b, () => deleteSessionById(b.dataset.deleteSession, b.dataset.sessionName)));
+        });
+      } catch (e) {
+        box.innerHTML = `<p id="err">${e.message}</p>`;
+      }
+    }
+
+    async function deleteSessionById(id, name) {
+      if (!confirm(`Eliminare definitivamente la sessione "${name}", le sue squadre e tutti gli eventi collegati?`)) return;
+      try {
+        await api(`/api/control/sessions/${id}`, { method: "DELETE" });
+      } catch (e) {
+        alert(e.message);
+      }
+      refreshLists();
+    }
+
+    async function deleteDraftById(id, name) {
+      if (!confirm(`Eliminare definitivamente la bozza "${name}"? Non riguarda le versioni già pubblicate.`)) return;
+      try {
+        await api(`/api/control/game-drafts/${id}`, { method: "DELETE" });
+        if (currentDraft && currentDraft.id === id) {
+          currentDraft = null;
+          document.getElementById("draftEditor").style.display = "none";
+        }
+      } catch (e) {
+        alert(e.message);
+      }
+      loadDrafts();
+    }
+
+    function refreshLists() {
+      loadDrafts();
+      loadPublishedGames();
+      loadSessionsList();
     }
 
     async function createDraft() {
@@ -598,6 +729,7 @@
         await saveDraft(); // pubblica sempre l'ultima versione modificata, non un salvataggio precedente
         const res = await api(`/api/control/game-drafts/${currentDraft.id}/publish`, { method: "POST", body: JSON.stringify({}) });
         okEl.textContent = `Pubblicato: ${res.slug}@${res.version}. Ora è selezionabile in Regia come gameSlug "${res.slug}".`;
+        loadPublishedGames();
       } catch (e) {
         errEl.textContent = e.message.includes("immutabile")
           ? `${e.message} — usa il campo "Versione" qui sopra (o il bottone "🔁 Incrementa") e pubblica di nuovo.`
@@ -630,13 +762,13 @@
     document.getElementById("saveDraftBtn").addEventListener("click", (e) => withFeedback(e.currentTarget, saveDraft));
     document.getElementById("publishDraftBtn").addEventListener("click", (e) => withFeedback(e.currentTarget, publishDraft));
     document.getElementById("deleteDraftBtn").addEventListener("click", (e) => withFeedback(e.currentTarget, deleteDraft));
-    document.getElementById("reloadDraftsBtn").addEventListener("click", (e) => withFeedback(e.currentTarget, loadDrafts));
+    document.getElementById("reloadDraftsBtn").addEventListener("click", (e) => withFeedback(e.currentTarget, async () => refreshLists()));
     // Il primo caricamento (sotto) parte prima che l'utente abbia potuto
     // scrivere il token: se poi lo inserisce/corregge, ricarica da sola
     // appena esce dal campo, senza dover premere "Aggiorna" a mano.
-    document.getElementById("token").addEventListener("blur", loadDrafts);
+    document.getElementById("token").addEventListener("blur", refreshLists);
 
-    loadDrafts();
+    refreshLists();
   </script>
 </body>
 </html>

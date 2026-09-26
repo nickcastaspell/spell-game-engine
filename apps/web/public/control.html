@@ -51,6 +51,7 @@
 
   <fieldset id="archiveFieldset">
     <legend>Sessioni</legend>
+    <label style="margin-top:0"><input type="checkbox" id="showAllGames" style="margin-right:0.4rem" />Mostra anche gli altri giochi (Less is More, The Pump, prove…) — di default solo «Il mistero di…»</label>
     <div id="sessionsList"><p>Nessuna sessione.</p></div>
   </fieldset>
 
@@ -251,16 +252,33 @@
       loadGames();
     });
 
+    // Di default Regia mostra solo le cacce "Il mistero di…" (itinerary):
+    // con giochi di prova e altri giochi mescolati era difficile fare pulizia.
+    // La casella li rende visibili tutti (es. per chi lavora su The Pump).
+    function showAllGames() {
+      return document.getElementById("showAllGames").checked;
+    }
+    try {
+      document.getElementById("showAllGames").checked = localStorage.getItem("spell_show_all_games") === "1";
+    } catch {}
+    document.getElementById("showAllGames").addEventListener("change", () => {
+      try {
+        localStorage.setItem("spell_show_all_games", showAllGames() ? "1" : "0");
+      } catch {}
+      loadGames();
+      loadSessionsArchive();
+    });
+
     // Elenco dei giochi pubblicati (prima bisognava scrivere lo slug a
     // memoria in un campo di testo) per "1. Crea sessione".
     async function loadGames() {
       const select = document.getElementById("gameSlug");
       const previous = select.value;
       try {
-        const games = await api("/api/control/games");
+        const games = (await api("/api/control/games")).filter((g) => showAllGames() || g.type === "itinerary");
         select.innerHTML = games.length
           ? games.map((g) => `<option value="${g.slug}">${g.name} (${g.slug})</option>`).join("")
-          : `<option value="">Nessun gioco pubblicato — usa l'Editor caccia</option>`;
+          : `<option value="">Nessuna caccia pubblicata — usa l'Editor caccia</option>`;
         if (games.some((g) => g.slug === previous)) select.value = previous;
       } catch (e) {
         select.innerHTML = `<option value="">${e.message}</option>`;
@@ -296,12 +314,15 @@
     async function loadSessionsArchive() {
       const box = document.getElementById("sessionsList");
       try {
-        const sessions = await api("/api/control/sessions");
+        const allSessions = await api("/api/control/sessions");
+        const sessions = allSessions.filter((s) => showAllGames() || s.gameType === "itinerary");
+        const hidden = allSessions.length - sessions.length;
+        const hiddenNote = hidden > 0 ? `<p><small>${hidden} session${hidden === 1 ? "e" : "i"} di altri giochi nascost${hidden === 1 ? "a" : "e"} (spunta la casella per vederle).</small></p>` : "";
         if (sessions.length === 0) {
-          box.innerHTML = "<p>Nessuna sessione.</p>";
+          box.innerHTML = "<p>Nessuna sessione.</p>" + hiddenNote;
           return;
         }
-        box.innerHTML = sessions
+        box.innerHTML = hiddenNote + sessions
           .map((s) => {
             const canReopen = s.status === "COMPLETED";
             const canArchive = s.status === "COMPLETED";

@@ -226,6 +226,8 @@ describe("editor città/tappe (Fase 3): bozze e pubblicazione", () => {
 
     const res = await get("/api/control/games");
     expect(res.status).toBe(200);
-    expect(res.json.data).toContainEqual({ slug: "citta-elencata", name: "Città elencata" });
+    expect(res.json.data).toContainEqual(
+      expect.objectContaining({ slug: "citta-elencata", name: "Città elencata", type: "itinerary", versions: 1, sessions: 0 })
+    );
   });
 });
