@@ -36,6 +36,14 @@
 
     .header { background: var(--ink); color: var(--paper); padding: 14px 20px 12px; display: flex; align-items: center; justify-content: space-between; position: sticky; top: 0; z-index: 10; }
     .header-squad { font-family: 'Playfair Display', serif; font-size: 18px; font-weight: 700; }
+    .header-session { font-size: 12px; color: #a89880; letter-spacing: .3px; line-height: 1.3; }
+    .feedback-card { text-align: center; padding: 28px 18px; background: var(--paper2); border: 1px solid var(--border); border-radius: var(--radius); }
+    .feedback-icon { font-size: 44px; margin-bottom: 8px; }
+    .feedback-title { font-family: 'Playfair Display', serif; font-size: 22px; font-weight: 900; color: var(--sage); margin-bottom: 8px; }
+    .feedback-card p { margin: 0 0 16px; color: var(--muted); }
+    .voucher-strip { margin: 12px 20px 0; padding: 10px 14px; border-radius: var(--radius); background: var(--ink); color: var(--gold-light); font-size: 13px; text-align: center; letter-spacing: .3px; }
+    .voucher-strip strong { font-family: 'Playfair Display', serif; font-size: 16px; letter-spacing: 2px; }
+    .photo-preview { display: block; max-width: 100%; max-height: 220px; margin: 0 auto 12px; border-radius: var(--radius); }
     #status { background: var(--gold); color: var(--ink); font-weight: 500; font-size: 13px; padding: 5px 12px; border-radius: 20px; }
     .badge { display: inline-block; padding: .2rem .6rem; border-radius: 999px; font-size: .75rem; font-weight: 600; text-transform: uppercase; letter-spacing: .4px; }
     .badge.open { background: var(--gold-light); color: var(--ink); }
@@ -102,10 +110,14 @@
 
     <div id="game" class="hidden">
       <div class="header">
-        <span class="header-squad" id="teamName"></span>
+        <div>
+          <div class="header-squad" id="teamName"></div>
+          <div class="header-session" id="sessionName"></div>
+        </div>
         <span id="statusBadge" class="badge"></span>
       </div>
       <div id="status"></div>
+      <div id="voucherStrip" class="voucher-strip hidden"></div>
       <div id="activity"></div>
       <div id="map-wrap"><div id="map" class="hidden"></div></div>
     </div>
@@ -188,6 +200,10 @@
       try {
         const state = await api("/api/team/state");
 
+        // Nome della sessione sempre visibile in testata, anche in sala
+        // d'attesa/pausa (banner sotto) — non solo quando il gioco è in corso.
+        if (state.sessionName) document.getElementById("sessionName").textContent = state.sessionName;
+
         const banner = sessionStatusBanner(state.sessionStatus);
         if (banner) {
           bannerShown = true;
@@ -206,6 +222,7 @@
           renderedActivityKey = null;
           renderedItineraryStepId = null;
           mapRenderedForKey = null;
+          feedbackActive = false;
         }
 
         if (!state.activity && state.currentPhaseId) {
@@ -293,8 +310,44 @@
     // in automatico non appena diventano la tappa corrente, una sola
     // volta per tappa (renderedItineraryStepId evita il doppio invio ad
     // ogni tick di poll, stesso principio di renderedActivityKey sopra).
-    let renderedItineraryStepId = null;
-    let lastVoucherToken = null;
+    let renderedItineraryStepId = null; // chiave composta "<stepId>|<stato foto>": vedi renderItinerary
+    let currentItineraryStep = null; // tappa attualmente mostrata (per interpretare l'esito di un invio)
+    let feedbackActive = false; // pagina di feedback dopo una risposta esatta: il poll non la sovrascrive finché non si clicca "Prossima tappa"
+    let awaitingPhotoStepId = null; // tappa foto per cui la squadra sta aspettando l'approvazione
+    let photoSending = false;
+
+    // Pagina di feedback dopo una risposta esatta (o foto approvata, buono
+    // ottenuto): la squadra vede l'esito e passa alla tappa successiva solo
+    // quando clicca — prima la tappa cambiava da sola e l'esito non si vedeva.
+    function showFeedback({ icon, title, text, extraHtml = "", buttonLabel = "Prossima tappa →" }) {
+      feedbackActive = true;
+      document.getElementById("voucherStrip").classList.add("hidden");
+      document.getElementById("activity").innerHTML = `
+        <div class="feedback-card">
+          <div class="feedback-icon">${icon}</div>
+          <div class="feedback-title">${title}</div>
+          <p>${text}</p>
+          ${extraHtml}
+          <button id="feedbackNextBtn" class="btn btn-gold">${buttonLabel}</button>
+        </div>`;
+      document.getElementById("feedbackNextBtn").addEventListener("click", () => {
+        feedbackActive = false;
+        renderedItineraryStepId = null;
+        poll();
+      });
+    }
+
+    // Buono/i ottenuto/i: resta visibile sopra la tappa anche dopo un
+    // ricaricamento della pagina (il codice serve al bar, non va perso).
+    function updateVoucherStrip(vouchers) {
+      const el = document.getElementById("voucherStrip");
+      if (!vouchers || vouchers.length === 0 || feedbackActive) {
+        el.classList.add("hidden");
+        return;
+      }
+      el.innerHTML = `🎟️ Buono: ${vouchers.map((v) => `<strong>${v.token}</strong>`).join(" · ")}`;
+      el.classList.remove("hidden");
+    }
 
     // Mappa del percorso proprio (Fase 5): tappe già fatte in verde, tappa
     // corrente evidenziata, tappe future assenti dalla mappa salvo che la
@@ -373,10 +426,25 @@
         return;
       }
 
+      updateVoucherStrip(itin.vouchers);
+      if (feedbackActive) return; // pagina di feedback in corso: si passa alla tappa successiva solo col click
+
       const step = itin.step;
       const progress = `Tappa ${itin.position} di ${itin.totalSteps}`;
+      currentItineraryStep = step;
 
-      if (step.view.type === "start" || step.view.type === "voucher") {
+      if (awaitingPhotoStepId && awaitingPhotoStepId !== step.id) {
+        // La squadra aspettava l'approvazione di una foto e la tappa è cambiata: approvata.
+        awaitingPhotoStepId = null;
+        showFeedback({ icon: "✅", title: "Foto approvata!", text: "Il facilitatore ha approvato la vostra foto." });
+        return;
+      }
+
+      // Solo "start" avanza da solo (nessun input, nessun contenuto da
+      // leggere): il buono invece si ritira con un click, così la tappa
+      // resta visibile e il codice compare subito dopo (prima appariva per
+      // un istante e il codice si vedeva solo alla fine).
+      if (step.view.type === "start") {
         if (renderedItineraryStepId !== step.id) {
           renderedItineraryStepId = step.id;
           submitItinerary(step.id, {});
@@ -385,8 +453,11 @@
         return;
       }
 
-      if (renderedItineraryStepId === step.id) return; // form già disegnato per questa tappa, non ridisegnare ad ogni poll
-      renderedItineraryStepId = step.id;
+      // Per le tappe foto lo stato (in attesa / rifiutata) cambia senza che
+      // cambi la tappa: la chiave di ridisegno lo include.
+      const renderKey = `${step.id}|${step.photo?.status ?? ""}|${step.photo?.attemptsLeft ?? ""}`;
+      if (renderedItineraryStepId === renderKey) return; // form già disegnato, non ridisegnare ad ogni poll
+      renderedItineraryStepId = renderKey;
 
       const hintBtn = step.hasHint
         ? `<button type="button" id="hintBtn" class="btn btn-secondary">💡 Suggerimento (-punti)</button><p id="hintText" class="hint-box hidden"></p>`
@@ -441,21 +512,70 @@
           }
           submitItinerary(step.id, { lat, lng });
         });
-      } else if (step.view.type === "photoApproval") {
+      } else if (step.view.type === "voucher") {
         el.innerHTML = `
           ${tappaHeader(progress, step.title)}
           ${stepImageHtml(step)}
           <div class="clue-box">${step.body}</div>
-          <input id="photoInput" type="file" accept="image/*" capture="environment" />
-          <button id="photoSubmitBtn" class="btn btn-primary">Invia foto</button>
+          <button id="voucherBtn" class="btn btn-gold">🎁 Ottieni il buono</button>
           <p id="submitErr"></p>`;
-        document.getElementById("photoSubmitBtn").addEventListener("click", submitPhoto);
+        document.getElementById("voucherBtn").addEventListener("click", () => submitItinerary(step.id, {}));
+      } else if (step.view.type === "photoApproval") {
+        const photo = step.photo || { status: null, attemptsLeft: 0 };
+        if (photo.status === "pending") {
+          // Foto già inviata: niente form (altrimenti la si manda due o più volte).
+          awaitingPhotoStepId = step.id;
+          el.innerHTML = `
+            ${tappaHeader(progress, step.title)}
+            ${stepImageHtml(step)}
+            <div class="feedback-card">
+              <div class="feedback-icon">📸</div>
+              <div class="feedback-title">Foto inviata</div>
+              <p>Foto correttamente inviata, in attesa dell'approvazione da parte del facilitatore.</p>
+            </div>`;
+        } else {
+          awaitingPhotoStepId = null;
+          const rejectedNote =
+            photo.status === "rejected"
+              ? `<p class="hint-box">La foto non è stata approvata dal facilitatore. ${
+                  photo.attemptsLeft > 0 ? `Scattane un'altra (tentativi rimasti: ${photo.attemptsLeft}).` : "Tentativi esauriti: rivolgetevi al facilitatore."
+                }</p>`
+              : "";
+          el.innerHTML = `
+            ${tappaHeader(progress, step.title)}
+            ${stepImageHtml(step)}
+            <div class="clue-box">${step.body}</div>
+            ${rejectedNote}
+            ${
+              photo.attemptsLeft > 0 || photo.status === null
+                ? `<input id="photoInput" type="file" accept="image/*" capture="environment" class="hidden" />
+                   <img id="photoPreview" class="photo-preview hidden" alt="" />
+                   <button id="photoPickBtn" class="btn btn-gold">📷 Scatta foto</button>
+                   <button id="photoSubmitBtn" class="btn btn-primary hidden">Invia foto</button>`
+                : ""
+            }
+            <p id="submitErr"></p>`;
+          const pickBtn = document.getElementById("photoPickBtn");
+          if (pickBtn) {
+            const input = document.getElementById("photoInput");
+            pickBtn.addEventListener("click", () => input.click());
+            input.addEventListener("change", () => {
+              const file = input.files && input.files[0];
+              if (!file) return;
+              const preview = document.getElementById("photoPreview");
+              preview.src = URL.createObjectURL(file);
+              preview.classList.remove("hidden");
+              pickBtn.textContent = "📷 Scatta di nuovo";
+              document.getElementById("photoSubmitBtn").classList.remove("hidden");
+            });
+            document.getElementById("photoSubmitBtn").addEventListener("click", submitPhoto);
+          }
+        }
       } else if (step.view.type === "finale") {
         el.innerHTML = `
           ${tappaHeader(progress, step.title)}
           ${stepImageHtml(step)}
           <div class="clue-box">${step.body}</div>
-          ${lastVoucherToken ? `<div class="voucher-card"><div class="voucher-title">Buono ottenuto</div><div class="voucher-code">${lastVoucherToken}</div></div>` : ""}
           <button id="finaleBtn" class="btn btn-gold">Conferma arrivo</button>
           <p id="submitErr"></p>`;
         document.getElementById("finaleBtn").addEventListener("click", () => submitItinerary(step.id, {}));
@@ -474,26 +594,75 @@
           method: "POST",
           body: JSON.stringify({ stepId, payload, idempotencyKey: crypto.randomUUID() }),
         });
-        if (result.voucherToken) lastVoucherToken = result.voucherToken;
-        renderedItineraryStepId = null; // forza il ridisegno alla prossima poll (tappa cambiata o esito noto)
-        poll();
+        handleSubmitResult(result);
       } catch (e) {
         const err = document.getElementById("submitErr");
         if (err) err.textContent = e.message;
       }
     }
 
+    // Dopo ogni invio la squadra deve vedere l'esito (prima non c'era alcun
+    // feedback: una risposta esatta cambiava tappa da sola, una sbagliata
+    // non diceva nulla).
+    function handleSubmitResult(result) {
+      const type = currentItineraryStep?.view?.type;
+      const res = result.stepResult || {};
+
+      if (type === "voucher") {
+        showFeedback({
+          icon: "🎁",
+          title: "Buono ottenuto!",
+          text: "Mostrate questo codice per ritirare la ricompensa.",
+          extraHtml: `<div class="voucher-card"><div class="voucher-title">Il vostro buono</div><div class="voucher-code">${result.voucherToken ?? ""}</div></div>`,
+        });
+        return;
+      }
+      if (type === "photoApproval" || type === "start" || type === "finale") {
+        renderedItineraryStepId = null; // ridisegna dallo stato del server (foto in attesa / tappa successiva / percorso completato)
+        poll();
+        return;
+      }
+      if (result.advanced) {
+        const points = result.pointsAwarded > 0 ? ` +${result.pointsAwarded} punti.` : "";
+        if (type === "geoAnswer") {
+          showFeedback({
+            icon: "📍",
+            title: "Complimenti, posizione corretta!",
+            text: (res.distanzaMetri != null ? `Corretto entro ${res.distanzaMetri} metri.` : "Posizione registrata.") + points,
+          });
+        } else {
+          showFeedback({ icon: "🎉", title: "Complimenti, risposta esatta!", text: `Ottimo lavoro.${points}` });
+        }
+        return;
+      }
+      // Risposta sbagliata: si resta sulla tappa, con l'esito scritto sotto il form.
+      const err = document.getElementById("submitErr");
+      if (err) err.textContent = result.messages?.[0] || "Risposta non corretta, riprovate.";
+    }
+
     async function submitPhoto() {
+      if (photoSending) return; // niente doppio invio
       const input = document.getElementById("photoInput");
       const file = input.files && input.files[0];
       if (!file) {
-        document.getElementById("submitErr").textContent = "Seleziona o scatta una foto.";
+        document.getElementById("submitErr").textContent = "Scatta prima una foto.";
         return;
       }
+      photoSending = true;
+      const btn = document.getElementById("photoSubmitBtn");
+      btn.disabled = true;
+      btn.textContent = "Invio in corso…";
       const reader = new FileReader();
-      reader.onload = () => {
-        const stepId = renderedItineraryStepId;
-        submitItinerary(stepId, { photoBase64: reader.result });
+      reader.onload = async () => {
+        try {
+          await submitItinerary(currentItineraryStep.id, { photoBase64: reader.result });
+        } finally {
+          photoSending = false;
+          if (btn.isConnected) {
+            btn.disabled = false;
+            btn.textContent = "Invia foto";
+          }
+        }
       };
       reader.readAsDataURL(file);
     }

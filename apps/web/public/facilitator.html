@@ -267,6 +267,7 @@
 
     let pollTimer = null;
     let facMap = null;
+    let facMapFitted = false; // inquadra la mappa UNA volta: i refresh non devono resettare lo zoom scelto a mano
     let facMarkersLayer = null;
     let latestRoutes = []; // dati di /api/facilitator/routes, riusati dal pannello di dettaglio
     let knownPendingIds = null; // per rilevare foto NUOVE tra un poll e l'altro
@@ -396,7 +397,10 @@
         allCoords.push([current.lat, current.lng]);
       });
       facMarkersLayer.addTo(facMap);
-      if (allCoords.length > 0) facMap.fitBounds(allCoords, { padding: [40, 40], maxZoom: 17 });
+      if (allCoords.length > 0 && !facMapFitted) {
+        facMap.fitBounds(allCoords, { padding: [40, 40], maxZoom: 17 });
+        facMapFitted = true;
+      }
     }
 
     // --- Pannello di dettaglio squadra ---

@@ -736,6 +736,15 @@ export function countPhotoAttempts(sessionId: string, teamId: string, stepId: st
   return row.c;
 }
 
+/** Ultima foto inviata da una squadra per una tappa (per mostrarle "in attesa"/"rifiutata" lato giocatore). */
+export function getLatestPhotoForStep(sessionId: string, teamId: string, stepId: string): ItineraryPhotoRow | undefined {
+  return db
+    .prepare(
+      "SELECT * FROM itinerary_photo WHERE session_id = ? AND team_id = ? AND step_id = ? ORDER BY attempt DESC LIMIT 1"
+    )
+    .get(sessionId, teamId, stepId) as unknown as ItineraryPhotoRow | undefined;
+}
+
 export function createItineraryPhoto(params: {
   sessionId: string;
   teamId: string;
@@ -826,6 +835,12 @@ export function findVoucherForStep(sessionId: string, teamId: string, stepId: st
   return db
     .prepare("SELECT * FROM voucher WHERE session_id = ? AND team_id = ? AND step_id = ?")
     .get(sessionId, teamId, stepId) as unknown as VoucherRow | undefined;
+}
+
+export function listVouchersForTeam(sessionId: string, teamId: string): VoucherRow[] {
+  return db
+    .prepare("SELECT * FROM voucher WHERE session_id = ? AND team_id = ? ORDER BY generated_at ASC")
+    .all(sessionId, teamId) as unknown as VoucherRow[];
 }
 
 export function createVoucher(sessionId: string, teamId: string, stepId: string, token: string): VoucherRow {

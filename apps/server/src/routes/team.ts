@@ -93,6 +93,7 @@ teamRouter.get(
     }
 
     sendOk(res, {
+      sessionName: session.name,
       sessionStatus: session.status,
       phaseStatus: session.phase_status,
       currentPhaseId: session.current_phase_id,

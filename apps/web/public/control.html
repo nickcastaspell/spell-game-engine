@@ -435,12 +435,18 @@
       }
     }
 
-    function renderStatusButtons(current) {
+    // phaseOpen: COMPLETED non è selezionabile finché il percorso è aperto
+    // (il server lo rifiuta comunque, vedi POST /status — qui solo per non
+    // offrire un bottone che darebbe sempre errore).
+    function renderStatusButtons(current, phaseOpen = false) {
       document.getElementById("sstatus").textContent = current;
       const box = document.getElementById("statusButtons");
       const all = ["DRAFT", "LOBBY", "RUNNING", "PAUSED", "COMPLETED", "ARCHIVED"];
       box.innerHTML = all
-        .map((s) => `<button data-status="${s}" ${s === current ? "disabled" : ""}>${s}</button>`)
+        .map((s) => {
+          const blocked = s === "COMPLETED" && phaseOpen;
+          return `<button data-status="${s}" ${s === current || blocked ? "disabled" : ""} ${blocked ? 'title="Chiudi prima il percorso"' : ""}>${s}</button>`;
+        })
         .join("");
       box.querySelectorAll("button").forEach((b) =>
         b.addEventListener("click", () => withFeedback(b, () => changeStatus(b.dataset.status)))
@@ -453,7 +459,7 @@
           method: "POST",
           body: JSON.stringify({ status }),
         });
-        renderStatusButtons(session.status);
+        renderStatusButtons(session.status, Boolean(session.currentPhaseId) && session.phaseStatus === "OPEN");
       } catch (e) {
         alert(e.message);
       }
@@ -723,6 +729,7 @@
 
     let overviewMap = null;
     let overviewMarkersLayer = null;
+    let overviewFittedForSid = null; // inquadra la mappa UNA volta per sessione: i refresh (4s) non devono resettare lo zoom scelto a mano
 
     async function loadOverviewMap() {
       const phaseId = document.getElementById("itineraryPhaseSelect").value;
@@ -750,7 +757,10 @@
         marker.addTo(overviewMarkersLayer);
       });
       overviewMarkersLayer.addTo(overviewMap);
-      overviewMap.fitBounds(withCoords.map((e) => [e.currentStep.lat, e.currentStep.lng]), { padding: [30, 30], maxZoom: 16 });
+      if (overviewFittedForSid !== sid) {
+        overviewMap.fitBounds(withCoords.map((e) => [e.currentStep.lat, e.currentStep.lng]), { padding: [30, 30], maxZoom: 16 });
+        overviewFittedForSid = sid;
+      }
     }
 
     // --- Galleria foto (Fase 6): tutte le foto della sessione, non solo
@@ -866,7 +876,7 @@
       if (!sid) return;
       try {
         const d = await api(`/api/control/sessions/${sid}/dashboard`);
-        renderStatusButtons(d.status);
+        renderStatusButtons(d.status, Boolean(d.currentPhaseId) && d.phaseStatus === "OPEN");
         renderPhaseButtons(d);
         renderItineraryPanel(d);
         document.getElementById("summary").textContent =

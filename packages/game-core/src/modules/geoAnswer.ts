@@ -78,7 +78,12 @@ export const geoAnswerModule: GameModule = {
       type: "team_state.patch",
       payload: {
         path: `stepLog.${ctx.activityId}`,
-        value: { esito: corretta ? "corretto" : "errato", posizione: { lat, lng }, distanzaMetri: Math.round(distanza) },
+        value: {
+          esito: corretta ? "corretto" : "errato",
+          posizione: { lat, lng },
+          // Senza punto atteso non c'è una distanza da mostrare (check-in libero).
+          ...(hasTarget(config) ? { distanzaMetri: Math.round(distanza) } : {}),
+        },
       },
     });
 

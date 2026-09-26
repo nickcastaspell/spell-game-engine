@@ -233,6 +233,19 @@ controlRouter.post(
       throw e;
     }
 
+    // Una sessione con un percorso ancora aperto non può passare a
+    // COMPLETED: da COMPLETED /phase non accetta più nulla (richiede
+    // RUNNING), quindi il percorso resterebbe aperto per sempre e le
+    // squadre continuerebbero a giocare in una sessione "conclusa" —
+    // bug segnalato dall'utente. Prima si chiude il percorso, poi si completa.
+    if (status === "COMPLETED" && session.current_phase_id && session.phase_status === "OPEN") {
+      throw new ApiError(
+        409,
+        "phase_still_open",
+        "Chiudi prima il percorso (fase aperta) e poi completa la sessione."
+      );
+    }
+
     // teamsMin: la regia non dovrebbe poter avviare la sessione (farla
     // entrare in LOBBY o partire in RUNNING) sotto la soglia minima di
     // tavoli dichiarata dal gioco — prima non era verificato affatto.

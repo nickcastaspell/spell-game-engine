@@ -23,9 +23,11 @@ import {
   findVoucherForStep,
   getGameVersionById,
   getItineraryPhoto,
+  getLatestPhotoForStep,
   getSession,
   getTeam,
   listTeams,
+  listVouchersForTeam,
   setBaseState,
   setTeamRouteWithVersionCheck,
   updateTeamStateWithVersionCheck,
@@ -53,6 +55,11 @@ import {
 
 export interface SubmitItineraryResult extends SubmitResult {
   voucherToken?: string;
+  /** La tappa è stata superata (la posizione avanza) — per la pagina di feedback lato giocatore. */
+  advanced?: boolean;
+  pointsAwarded?: number;
+  /** Esito registrato in stepLog per questa tappa (es. "corretto"/"errato"/"in_attesa", distanzaMetri per geoAnswer). */
+  stepResult?: { esito?: string; distanzaMetri?: number };
 }
 
 function resolveCurrentStep(
@@ -184,6 +191,18 @@ export function getItineraryStatus(sessionId: string, teamId: string, phaseId: s
   const view = mod.playerView(ctx);
   const hintsUsed = (state.hintsUsed as Record<string, boolean> | undefined) ?? {};
 
+  // Tappe foto: la squadra deve sapere se la sua foto è già in attesa di
+  // approvazione (per non rimandarla due o più volte) o è stata rifiutata.
+  let photo: { status: "pending" | "rejected" | null; attemptsLeft: number } | null = null;
+  if (step.type === "photoApproval") {
+    const latest = getLatestPhotoForStep(sessionId, teamId, step.id);
+    const maxAttempts = itinerary.maxPhotoAttempts ?? 3;
+    photo = {
+      status: latest?.status === "pending" ? "pending" : latest?.status === "rejected" ? "rejected" : null,
+      attemptsLeft: Math.max(0, maxAttempts - countPhotoAttempts(sessionId, teamId, step.id)),
+    };
+  }
+
   return {
     completed: false,
     position,
@@ -195,8 +214,10 @@ export function getItineraryStatus(sessionId: string, teamId: string, phaseId: s
       body: step.body,
       image: step.image ?? null,
       view,
+      photo,
       hasHint: Boolean(step.hint) && !hintsUsed[step.id],
     },
+    vouchers: listVouchersForTeam(sessionId, teamId).map((v) => ({ stepId: v.step_id, token: v.token })),
     route: routeView,
   };
 }
@@ -364,7 +385,27 @@ export async function submitItineraryStep(params: {
       return { submissionId: submission.id, voucherToken };
     });
 
-    return { submissionId: result.submissionId, status: "accepted", messages: [], replay: false, voucherToken: result.voucherToken };
+    // Esito per la pagina di feedback lato giocatore: prima l'invio tornava
+    // sempre {messages: []} e il client non poteva distinguere una risposta
+    // giusta da una sbagliata (nessun feedback dopo l'invio).
+    const stepLogEffect = outcome.effects.find(
+      (e) => e.type === "team_state.patch" && e.payload.path === `stepLog.${step.id}`
+    );
+    const stepLogValue = stepLogEffect?.payload.value as { esito?: string; distanzaMetri?: number } | undefined;
+    return {
+      submissionId: result.submissionId,
+      status: "accepted",
+      messages: outcome.effects
+        .filter((e) => e.type === "message.emit" && e.payload.audience === "team")
+        .map((e) => String(e.payload.text)),
+      replay: false,
+      voucherToken: result.voucherToken,
+      advanced: outcome.effects.some((e) => e.type === "itinerary.advance"),
+      pointsAwarded: outcome.effects
+        .filter((e) => e.type === "score.add")
+        .reduce((sum, e) => sum + Number(e.payload.amount ?? 0), 0),
+      stepResult: stepLogValue ? { esito: stepLogValue.esito, distanzaMetri: stepLogValue.distanzaMetri } : undefined,
+    };
   } catch (e) {
     if (isUniqueConstraintError(e, "idempotency_key")) {
       const raced = findSubmissionByIdempotencyKey(idempotencyKey);
